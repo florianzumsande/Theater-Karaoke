@@ -1,0 +1,3130 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>MS Rosta • Karaoke v18p • Fixe Rollenfilter</title>
+<style>
+  :root { --scale: 1.0; --autoScale: 1.0; --bg:#0b1220; --fg:#e5e7eb; --card:#0f172a; --border:#1f2a44; --muted:#94a3b8; --fill:#facc15; --cueColor:#ffffff; }
+  html,body { height:100%; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial, sans-serif; background:var(--bg); color:var(--fg); }
+  header { position: sticky; top:0; background:var(--bg); padding:12px; border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:center; z-index:10; }
+  h1 { font-size:16px; margin:0; font-weight:800; }
+  .badge { background:#1f2a44; color:#e5e7eb; padding:4px 10px; border-radius:999px; font-size:12px; }
+  #sizeSlider { width:40vw; max-width:240px; }
+  main { max-width: 900px; margin: 10px auto calc(84px + env(safe-area-inset-bottom)); padding: 0 12px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:12px; margin-bottom:12px; }
+  #viewport { min-height:58dvh; max-height: calc(100dvh - 180px); overflow-y:auto; display:flex; flex-direction:column; gap:16px; }
+  body.focus #viewport { max-height: calc(100dvh - 24px); }
+  #viewport article { overflow-wrap:anywhere; word-break:normal; }
+
+  .cue-current { font-size: calc(var(--scale) * var(--autoScale) * 2.1rem); font-weight: 800; line-height:1.28; color: var(--cueColor); word-break: keep-all; overflow-wrap: break-word; hyphens: none; }
+  @media (max-width: 600px){ .cue-current { font-size: calc(var(--scale) * var(--autoScale) * 1.6rem); } }
+  .cue-near { font-size: calc(var(--scale) * 1.05rem); opacity:.85; }
+  .speaker { color:var(--fill); font-weight:900; }
+
+  .toolbar { position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--border); padding:10px 12px calc(12px + env(safe-area-inset-bottom)); display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  button { min-height:54px; border-radius:14px; font-weight:800; font-size:16px; border:1px solid var(--border); background:#0b1629; color:#e5e7eb; -webkit-tap-highlight-color: transparent; }
+  button.primary { background:var(--fill); color:#111827; border-color:var(--fill); }
+  .hud { color:var(--muted); font-size:12px; }
+  .controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-left:auto; }
+  .chip { border:1px solid var(--border); border-radius:999px; padding:8px 12px; font-size:14px; background:transparent; }
+  .panel { display:none; }
+  .panel.open { display:block; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input[type="search"] { height:42px; border-radius:12px; border:1px solid var(--border); background:transparent; color:var(--fg); padding:0 12px; font-size:16px; }
+  .list { display:grid; gap:8px; margin-top:8px; }
+  .item { display:flex; align-items:center; justify-content:space-between; gap:8px; border:1px solid var(--border); border-radius:12px; padding:8px 12px; }
+  .small { font-size:13px; color:var(--muted); }
+  .btn-mini { min-height:38px; font-size:14px; padding:0 12px; border-radius:10px; }
+
+  /* Progressive fill */
+  .chars .c { opacity:.26; transition:opacity .06s linear, color .06s linear; }
+  .cue-current .chars .c { color: var(--cueColor); opacity:1; }
+  .cue-current .chars .c.filled { color: var(--fill); opacity:1; }
+
+  /* Focus mode */
+  body.focus header, body.focus .toolbar, body.focus .panel { display:none !important; }
+  #focusFloat { position: fixed; top: 10px; right: 10px; z-index: 9999; background: rgba(250,250,250,.15); border: 1px solid rgba(255,255,255,.3); color:#facc15; font-size: 22px; border-radius: 50%; width: 52px; height: 52px; display:flex; align-items:center; justify-content:center; backdrop-filter: blur(8px); }
+  body:not(.focus) #focusFloat { display:none; }
+
+  /* Stage directions */
+  .stageDir { color:#9ca3af; font-style: italic; }
+  body.hideDirs .stageDir { display:none; }
+
+/* [FAV v2] styles & legacy hide */
+#favPanel{ max-height: 40vh; overflow:auto; }
+#favList .favItem{ display:flex; align-items:center; gap:.5rem; }
+#favList .favJump{ flex:1; text-align:left; }
+#favList .favDel{ opacity:.8; }
+#btnFavToggle[aria-pressed="true"]{ font-weight:700; }
+
+/* Hide legacy bottom mark UI safely (no DOM deletion) */
+#btnAddMark, #btnClearMarks, #markList, #markGroup { display: none !important; }
+
+
+/* [FavNav v4] bottom-left bar */
+.favNavBar{
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  opacity: 0.85;
+}
+.favNavBtn{
+  padding: .3rem .5rem;
+  border: 1px solid #666;
+  background: rgba(255,255,255,0.08);
+  color: #ccc;
+  font-size: .9rem;
+  border-radius: .3rem;
+}
+.favNavBtn:hover{ opacity: 1; }
+.favStickyMirror{
+  padding: .4rem .6rem;
+  border-radius: .4rem;
+  border: 1px solid #666;
+  background: rgba(255,255,255,0.1);
+  color: #ccc;
+  font-size: .9rem;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+.favStickyMirror:hover{ opacity: 1; }
+.favStickyMirror[aria-pressed="true"]{
+  font-weight: 700;
+  background: rgba(255,255,200,0.15);
+  color: #fff480;
+}
+
+
+/* [FavLoop v7] checkbox styling */
+.favLoopLabel{
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .2rem .35rem;
+  border: 1px solid #666;
+  border-radius: .3rem;
+  background: rgba(255,255,255,0.08);
+  color: #ccc;
+  font-size: .9rem;
+  opacity: 0.85;
+}
+.favLoopLabel input{ transform: scale(1.1); }
+
+
+/* [Safe Hide] hide and disable the dialog "Weiter" button at bottom right */
+#btnNext {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+
+/* [Toolbar V3 Full Horizontal] */
+header, #toolbar, .controls {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+header .controls {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  align-items: center;
+  gap: .4rem;
+}
+
+header button, header .chip, .controls button {
+  flex: 1 1 10%;
+  min-width: 90px;
+  max-width: 160px;
+  text-align: center;
+  padding: .5rem .6rem;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #666;
+  border-radius: .4rem;
+  color: #ccc;
+  font-size: .95rem;
+}
+
+header button:hover, header .chip:hover, .controls button:hover {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+
+/* Remove unintended left padding/margins that waste horizontal space */
+header .wrap, header .container, header .inner {
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  width: 100% !important;
+}
+
+
+/* [Top Info Bar] small line above toolbar */
+#topInfoBar{
+  width: 100%;
+  text-align: center;
+  font-size: .85rem;
+  color: #ccc;
+  margin: .3rem 0 .4rem 0;
+  letter-spacing: .2px;
+}
+#topInfoBar .version{ font-weight: 600; color: #ddd; }
+#topInfoBar .dialogCount{ color: #9cc3ff; }
+
+
+/* [V5] Move count to top bar; hide old badge in header */
+header #badge { display: none !important; }
+
+
+/* [V5] Ensure toolbar controls use full width */
+header .controls {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  gap: .4rem;
+}
+
+
+/* [V6] Smaller toolbar buttons */
+header button, header .chip, .controls button {
+  flex: 1 1 10%;
+  min-width: 80px;
+  max-width: 140px;
+  text-align: center;
+  margin: 0.1rem;
+  padding: .25rem .4rem;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #666;
+  border-radius: .35rem;
+  color: #ccc;
+  font-size: .8rem;
+}
+
+header button:hover, header .chip:hover, .controls button:hover {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+
+
+/* [V7] Compact toolbar buttons (half click area) */
+header button, header .chip, .controls button {
+  flex: 1 1 10%;
+  min-width: 60px;
+  max-width: 120px;
+  text-align: center;
+  margin: 0.05rem;
+  padding: .15rem .25rem;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #666;
+  border-radius: .3rem;
+  color: #ccc;
+  font-size: .75rem;
+  line-height: 1.1;
+}
+
+header button:hover, header .chip:hover, .controls button:hover {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+/* Slightly reduce gaps between buttons */
+header .controls {
+  gap: .25rem !important;
+  justify-content: space-evenly;
+}
+
+
+/* [V8] Hide top "Merken" button (btnFavToggle) from toolbar */
+#btnFavToggle {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+
+/* [V9] Stack size and tempo vertically */
+#sizeTempoGroup{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .2rem;
+}
+#sizeTempoGroup label{ font-size: .85rem; color: #ccc; }
+#sizeTempoGroup input[type="range"]{ width: 160px; }
+
+
+/* [V10] Ensure button text stays inside buttons */
+header button, .controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  max-width: 150px;
+  padding: .2rem .35rem;
+  font-size: .78rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chips that act like buttons should behave similarly */
+header .chip:not(label.chip), .controls .chip:not(label.chip) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  max-width: 150px;
+  padding: .2rem .35rem;
+  font-size: .78rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Label chips with inputs (e.g., Tempo) must not clip the slider */
+label.chip {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: unset;
+}
+label.chip input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 120px;
+  max-width: 30vw;
+}
+
+/* Size/Tempo stacked group tweaks so labels don't wrap oddly */
+#sizeTempoGroup label {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+}
+#sizeTempoGroup input[type="range"] {
+  width: 180px;
+  max-width: 40vw;
+}
+
+
+/* [V11] Move 'Tempo' label above its slider */
+#sizeTempoGroup label.chip {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 0.15rem !important;
+}
+#sizeTempoGroup label.chip input[type="range"] {
+  width: 180px;
+  max-width: 40vw;
+}
+
+
+/* [V12] Remove button-style background from Tempo slider */
+#sizeTempoGroup label.chip {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+#sizeTempoGroup label.chip:hover {
+  background: none !important;
+  color: inherit !important;
+}
+
+
+/* [V13] Hide bottom-left "Zurück" button */
+#btnPrev {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+</style>
+<style id="blueclick-css">
+button:active,
+input[type=range]:active,
+select:active {
+  background-color: #2196f3 !important;
+  color: #fff !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+button.clicked,
+input[type=range].clicked,
+select.clicked {
+  background-color: #2196f3 !important;
+  color: #fff !important;
+}
+button,
+input[type=range],
+select {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+</style>
+
+
+<style id="speaker-blue">
+.speaker { color: #2196f3; font-weight: bold; }
+</style>
+
+
+<style id="lm_sidebar_css">
+/* --- Lernmodus Sidebar --- */
+#lm_sidebar_backdrop{
+  position: fixed; inset: 0; background: rgba(0,0,0,.35);
+  display:none; z-index: 9998;
+}
+#lm_sidebar{
+  position: fixed; top:0; right:0; height:100%; width: 280px;
+  max-width: 90vw;
+  background: var(--tk-surface, #111);
+  color: inherit;
+  box-shadow: -3px 0 16px rgba(0,0,0,.35);
+  transform: translateX(100%);
+  transition: transform .22s ease-out;
+  z-index: 9999;
+  display: flex; flex-direction: column;
+}
+#lm_sidebar.open{ transform: translateX(0); }
+#lm_sidebar_head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.08);
+  font-weight:600;
+}
+#lm_sidebar_body{
+  padding: 12px; display:flex; flex-direction:column; gap:14px;
+}
+#lm_sidebar .row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+#lm_sidebar .row label{ font-size: 13px; opacity: .9; }
+#lm_sidebar input[type="range"]{ width: 160px; }
+#lm_close{ background:none; border:0; color:inherit; font-size:18px; cursor:pointer; padding:4px 6px; }
+#lm_btn{ /* toolbar button */ }
+
+/* Auf kleinen Geräten Sidebar vollbreit */
+@media (max-width: 520px){
+  #lm_sidebar{ width: 100vw; }
+}
+
+/* Verstecke die alten UI-Blöcke in der Toolbar, Sidebar übernimmt */
+#hr_toggle, #l2_group{ display:none !important; }
+</style>
+
+
+<style id="lm_hide_toolbar_alpha">
+/* Versteckt alle Transparenz-/Alpha-Reglerbereiche in der Toolbar, da nun in der Sidebar geregelt */
+#hr_toggle,            /* kompletter L-Block (falls noch sichtbar) */
+#hr_alpha_group,       /* möglicher Containername */
+label[for="hr_range"], /* Label zum Regler */
+#hr_range,             /* der eigentliche Slider */
+.controls .alpha, 
+.controls .alpha-group,
+.controls [data-alpha],
+.controls input[type="range"][id*="hr_"] { 
+  display: none !important;
+}
+</style>
+
+
+<style id="lm_hide_hr_toggle_full">
+/* Vollständige Entfernung des alten Transparenz-Button-Containers (#hr_toggle) */
+</style>
+
+
+<style id="lm_toolbar_cleanup_css">
+/* Reste der alten Transparenz-Gruppe in der Toolbar vollständig entfernen */
+.controls .chip:empty { display: none !important; }
+.controls .chip:has(#hr_range) { display: none !important; }
+.controls div:has(#hr_range) { display: none !important; }
+.controls .alpha, .controls .alpha-group, .controls [data-alpha] { display: none !important; }
+/* Falls ein leerer Chip nur aus Spaces/Linebreaks besteht */
+.controls .chip { min-width: 0; }
+</style>
+
+
+<style id="tk_remove_overlay_css">
+#hr_overlay { display: none !important; pointer-events: none !important; }
+</style>
+
+
+<style id="tk_remove_overlay_toolbar_cleanup">
+#hr_toggle, label[for="hr_range"], #hr_range, .controls .alpha, .controls .alpha-group, .controls [data-alpha]{
+  display: none !important;
+}
+</style>
+
+</head>
+
+<div id="topInfoBar">
+  🎤 <span class="version" id="infoVersion">Karaoke v18p</span> • <span class="dialogCount" id="infoCount">– Dialoge</span>
+</div>
+
+
+<div id="favNavBar" class="favNavBar" aria-label="Favoriten Navigation">
+  <button id="btnFavPrev" class="favNavBtn" title="Vorheriger Favorit">◀</button>
+  <button id="btnFavSticky" class="favStickyMirror" aria-pressed="false" title="Aktuellen Dialog merken (F)">☆ Merken</button>
+  <button id="btnFavNext" class="favNavBtn" title="Nächster Favorit">▶</button>
+  <button id="btnFavAuto" class="favNavBtn" title="Favoriten automatisch durchlaufen">Auto</button>
+  <label id="favLoopLabel" class="favLoopLabel" title="Dauerschleife">
+    <input type="checkbox" id="chkFavLoop"> 🔁
+  </label>
+</div>
+
+  <header>
+    <span id="badge" class="badge" aria-live="polite">0 Dialoge</span>
+    <div class="controls"><button id="lm_btn" class="chip" title="Lernmodus">🧠</button>
+      <!-- Lernmodus Toggle + Transparenz (0–30% sichtbar, gamma) -->
+      <div id="hr_learn_group" class="chip" style="display:flex;flex-direction:column;gap:.25rem;align-items:flex-start;">
+<label id="hr_toggle" class="chip" style="display:inline-flex;align-items:center;gap:.35rem;">
+        <input id="hr_enable" type="checkbox" checked style="width:18px;height:18px;">
+        <span>L</span>
+      </label>
+      <!-- Lernmodus 2: jedes n-te Wort maskieren -->
+      <div id="l2_group" class="chip" style="display:flex;flex-direction:column;gap:.25rem;align-items:flex-start;">
+        <div style="display:flex;align-items:center;gap:.5rem;">
+          <label for="l2_enable" style="display:flex;align-items:center;gap:.35rem;cursor:pointer;">
+            <input id="l2_enable" type="checkbox" />
+            <span>L2</span>
+          </label>
+          <div style="display:flex;align-items:center;gap:.35rem;">
+            <label for="l2_step" style="font-size:12px;opacity:.85;">jedes n‑te Wort:</label>
+            <input id="l2_step" type="range" min="2" max="8" step="1" value="3" style="width:90px;">
+            <span id="l2_step_val" style="font-size:12px;opacity:.85;">3</span>
+          </div>
+        </div>
+        <div style="font-size:11px;opacity:.75;">Sprecherzeile bleibt unmaskiert; nur der Dialogtext wird punktuell durch „…“ ersetzt.</div>
+      </div>
+
+<div id="hr_range_block" class="chip" style="display:flex;flex-direction:column;gap:.25rem;align-items:flex-start;">
+        <label for="hr_range" style="font-size:12px;opacity:.85;">Transparenz</label>
+        <input id="hr_range" type="range" min="70" max="100" value="85" style="width:65px;">
+      </div>
+</div>
+
+      <div id="sizeTempoGroup"><label style="font-size:13px;">Größe <span id="szVal">1×</span></label>
+<input id="sizeSlider" type="range" min="0.8" max="2.6" step="0.05" value="1" aria-label="Textgröße"/>
+<label class="chip">Tempo <input id="playMs" type="range" min="600" max="12000" step="100" value="3000" style="width:36vw;max-width:240px;margin-left:6px;" aria-label="Autoplay Tempo"></label></div>
+      <button id="btnToc" class="chip">Akt/Szene</button>
+      <button id="btnFavToggle" class="chip" aria-pressed="false" title="Aktuellen Dialog merken/entmerken (F)">☆ Merken</button>
+      <button id="btnFavs" class="chip">⭐ </button>
+      <button id="btnPlay" class="chip">▶︎ Auto</button>
+      
+      <label class="chip"><input id="loop" type="checkbox" checked style="margin-right:6px;">Loop</label>
+      <button id="btnSearch" class="chip">Suche</button>
+      <button id="btnRoles" class="chip">🎭 Filter</button>
+      <button id="btnStage" class="chip">🎬 Regie</button>
+      <button id="btnTheme" class="chip" title="Theme wechseln">🌙</button>
+      <button id="btnFocus" class="chip" title="Fokusmodus">⚙️</button>
+    </div>
+  </header><main>
+    <div class="card">
+      <div class="hud" id="hud">—</div>
+
+      <div id="toc" class="panel" aria-label="Inhaltsverzeichnis"></div>
+
+      
+<div id="favPanel" class="panel" aria-label="Favoriten">
+  <div class="row" style="justify-content:space-between; align-items:center;">
+    <div class="small" id="favCount">—</div>
+    <div>
+      <button id="btnFavClear" class="btn-mini" title="Alle Favoriten löschen">Alle löschen</button>
+      <button id="btnFavClose" class="btn-mini" title="Schließen">Schließen</button>
+    </div>
+  </div>
+  <div id="favList" class="col gap-s"></div>
+</div>
+<div id="searchPanel" class="panel" aria-label="Suche">
+        <div class="row">
+          <input id="q" type="search" placeholder="z.B. Hinnerk, Kapitän, Moin…" style="flex:1;" inputmode="search">
+          <button id="btnFind" class="btn-mini">Finden</button>
+          <button id="btnPrevHit" class="btn-mini" aria-label="Vorheriger Treffer">⟨</button>
+          <button id="btnNextHit" class="btn-mini" aria-label="Nächster Treffer">⟩</button>
+          <span class="small" id="hitInfo">0 Treffer</span>
+        </div>
+        <div id="hitList" class="list"></div>
+      </div>
+
+      <div id="rolesPanel" class="panel" aria-label="Dialogfilter">
+        <div class="small" style="margin-bottom:8px;">Feste Auswahl — Navigation/Auto zeigt nur diese Dialoge (+ 1 Kontext).</div>
+        <div id="rolesList" class="list"></div>
+        <div class="row">
+          <button id="rolesClear" class="btn-mini">Alles löschen</button>
+          <button id="rolesAll" class="btn-mini">Alle wählen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="viewport" class="card" role="region" aria-live="polite">
+      <article id="prev" class="cue-near"></article>
+      <article id="curr" class="cue-current"></article>
+      <article id="next" class="cue-near"></article>
+    </div>
+  </main>
+
+  <div class="toolbar">
+    <button id="btnPrev">⟨ Zurück</button>
+    <button id="btnNext" class="primary">Weiter ⏩</button>
+  </div>
+
+  <textarea id="playtext" style="display:none;">﻿1. Akt
+1. Szene
+Toni, Gretchen, Hinnerk, Lieschen, Willi, Mäggie
+Gretchen:	Toni, Toni!!! Nu kumm al, beiehl di n bittken! Ik wull up alle Fälle as erste up dat Böötken wähn! Du büst vandoage awer ok weer n Troantüte.
+Toni:	Gretchen, segg moal, hest du wat an diene Lauscher oder wat? Taun 1. haff de Käpt´n vörhen seggt wi schöllt wachten bis dat wir upraupt wörrd und Taun 2. Dat hier is kieeen Bööööööötken…. Dat hier is `n Schipp. Nu wees doch moal n bittken sinniger.
+Gretchen:	Schipp oder Böötken, na dat is mi doch moal schietegoal, giff moal n bittken GAS, ik will de erste wän de hier siene  Feute up`t Böötken sett !!!
+Toni:	(sauer) Schipp – Verdamminomoal…. DAT IS N SCHIPP! Up dit Schipp goaht 6.000 Lüe. Doar past heel Lehe mit drop …. Un Neeleihe noch dortau.
+Gretchen:	Nu hör mi awer moal blos up, dat was ja moal so moie, wi ut Leeihe tausoamen mit heel Neeileeier up eein Böötken, dat end in Chaos; dat geiht ja noit nicht gaud. Ne ne, de Neeileier loat man in Schlauchbott achteran paddeln.
+Toni:	Joa man Gretchen, ik wull dormit doch blots seggen, dütt Schipp ist riesengroot. Un sowiso hebbt wi doch use Zimmer al reserveert. Du bruukst also nich as erste rinloapen, du verpasst doar rein goar nix!
+Gretchen:	Ja-haaaa dat seggst du nu so! Man noasen is use Zimmer up düt Böötken  in Keller … und dann…? Ik will al wat seein un beleven, un vör allen noa buten kieken könen! 
+Toni:	Gretchen…  ein Schipp haff kien Keller! Un nu treck mi doch nich de heele Tied  
+	so… ik bün doch kien D-Zug…
+Gretchen:	…doch du büst n D-Zug… letzte Tied moal weer mit de Boahn föhrt…. Un nu kumm Tonichen, nu kumm doch bitte! Weest du, ik möchte noasen bie`t Vesper unbedingt direkt an de Siete van den Käpt´n sitten goan!
+Toni:	Vesper … Ik  geev et up! (Toni und Gretchen stehen am Bühnenrand und warten auf die anderen. Gretchen versucht, die Tür zum Schiff zu öffnen)
+Mäggie:  	Tau Willi, nu kumm jetzt endlich. Kiek, die Gretchen an, de ist all weer mit ehre Nöse heel vörne an. Ik will awer as erste up dat Boot!
+Willi:	Also Mäggie, ik weet joa ok nicht, wenn ik mi dat Schiff so bekieken dau, doar wörd mi al weer direkt n bittken wat komisch tomöte. Ik glöv mi wörd heller schwindelig… un heet…. un kolt … un…
+Mäggie: 	…Ach wat nu hör awer moal up mit dien Gejösel. Wees doch nich al weer so`n Waschlappen!
+Willi:	Ja nu bekiek die doch moal woar dat schaukeln deit! Mi wörd nu al heel komisch in Lief. Dor dreiht sück alles.
+Mäggie: 	Dat dreihen kummmt seker nicht van`t Schipp, dat kummmt van de 3 Brötckes mit Zieppelmett up Leverwoast van vomörgen, de du futterst hest…. Dor mutt man jo „Schietereei“ bi kriegen.
+Willi:	Mäggie nu ünnerschätz  nich so een  so een smeedig Mörgen…
+Mäggie:  	Willi! Dat will ik nu nich al weer hören. Dortau  hebbt wi to Huus  joa al vörübt vör use Krüzfoahrt. Dat was doch `n gaude Idee dat wi us dat Woaterberre koopt hebbt. Dormit schaukelte dat nachts al moi und du kunnst di doar al an gewöhnen.
+Willi:	Joa, gewöhnen… woar denn an? An de Innoame van Reisetabletten jeden Oabend vör`t tau Berre goan? Oder doran dat jede nacht een Tsunami öwert Berre kummmt wenn du die dreiht hest? De ersten dreei Nächte bün ik dorbi direkt moal över Board goan. Man vör die is dat joa allens kien Problem, du hest diene Rettungsringe joa ümmer bi di…(lacht)
+Mäggie:  	Findest du dat nu witzig oder wat? Häh? Willi? Pass op mien  leeve Kerl. So un nu giff moal weer n bittken Gas, ik möchte noasen bie`t Käptn´s Dinner unbedingt direkt an de Siete van Käpt´n sitten goan!
+Willi:	(versöhnlich/reumütig) Awer Mäggie, bün ik nicht mehr dien Käpt´n?
+Mäggie:  	(lacht) Käptn, ach Fränzlein, mien  lüttken Käpt´n Blaubär… du wördest di joa ohne dien Quietscheentchen sümst noch in de  Badewanne verföhren! (stellen sich hinter Toni und Gretchen, Mäggie drängelt sich vor Toni)
+Lieschen:	Hinnerk, nu beiel di doch moal! Ik will nich all weer de letzte wäen! De Gretchen und de Mäggie bünt all heel vörne. Un ik  dackel blos achteran, weil du so´n Schloapmütze bist!
+Hinnerk:	Lieschen, nu wachte doch! Kiek di doch moal um, de Anneren sitt doch hier ok noch aale heel brav up ehre Stöhle und wachtet up dat Boarding. (zeigt ins Publikumm) Wat moakst du hier so vörn Stress? 
+Lieschen:	Weil IK Vanoavendd direkt kägen den Herr Kapitän Struvenhus sitten will. Loat de man aale hier ruhig sitten blieven, fallt mi tau. Well toerst doar is moalt toerst, un ik moal up jeden Fall as erste Vandoage!
+Hinnerk:	Lieschen, Menschenskinner! Dat is mi nu echt pienlich! De kiekt us alle heel dösig an dor achtern. De prot sogoar över us. Kumm loat us lever sitten goan… 
+Lieschen:	Nen Scheiß werd ik daun un mit hier nu hensetten. Un sowiso, wenn hier eeine pienlich is, dann büst du dat! Kiek die doch moal an… musst du jedet moal dien dösigen Knax-Brustbüddel um dien Nacken trekken? Wenn ik denn moal to packen krieg schmiet ik üm wech. 
+Hinnerk:	(wütend) Dat kannst du ja moal utprobeeren, Wehe! Den haff ik geschenkt krägen as ik 12 was. De is also noch noagelneei. Un du weest genau wo gefaahrlich dat överall in`t Utland is, oder? Düssen Büddel erfüllt höchste Sicherheits-Standards. 
+Lieschen:	Hinnerk, den hest du fleeten Weeke ok antrokken as du to´n Bäcker no Neeileeie büst weil use Schmitz dicht haar. 
+Hinnerk:	Joa wat denn… Utland… 
+Lieschen:	Gretchen! Mäggie! Is denn al oapen?
+Gretchen:	Nee, is noch dicht, ik haff all allens probeert, geiht nicht oapen.
+Toni:	Probeert? Du hest bold den Griff offreeten!
+Mäggie:	Also dat is aver ok nicht to begriepen, dat man us hier ok einfach so stoahn lett!
+Willi:	 Joa gaud, dor achtern bünt joa ok noch n poar Stöhle frei woar wi sitten goan     könnt… 
+Mäggie:   Ha! Dröm wieder … hier bliev ik stoahn bis dat Schapp upgaiht! Un wenn dat hier blos eeine  versöch an mi vörbi tokoamen, dann föhr ik mien  Ellenbogen aver sowat van rut…	
+Lieschen:	Loat mi moal vör (Ellenbogen – AUA), ik will doch blos kött dör dat Schlödelllock kieken.  (tut es) Mist, ik kann nix seihn, gor nix. Schöllt wi viellichte moal Räuberlädder moaken, viellicht könnt wi doar boben dör dat Bullauge rinkieken? 
+(Die Frauen probieren eine Räuberleiter, oder eine Pyramide o. andere Figur zum hochkommen)
+Hinnerk:		Segg moal Lieschen, hest du vörhen to lang in de Sünne stoahn oder wat? Nu  moak doch moal endlich n Bült sinniger. 
+Toni:	Also i drei benähmt jau joa as son poar Furien! Viellicht könnt I all dreie nu moal sinnig wähn, wi wörd wall alle noch up dat Schipp koamen! 
+Willi:	Genau! Wi hebbt doch Urlaub! Ik vör mien  Deeil bün joa all heller entspannt und loat dat nu moal fein sachte angoahn, un dat wör ik jau Fraulü nu ok moal empfehlen! 
+	(Die Frauen hören mit überkreuzten Armen zu, drehen sich dann urplötzlich um Richtung Schiff und klopfen an eine Türe oder zetern laut)
+Frauen:	Hallo!!! Heeeee!!! Wann geiht hier denn nur endlich oapen? Wann dürt wi up´t Schipp? Wann dürt wi rinkoamen? Hallooooo? Hallöööööchen? Mohooinnnn? Aloha? Ahoi? 
+Kapitän: 	Aufgrund erheblicher Turbulenzen menschlicher Natur haben wir uns zu Ihrer aller, und unserer Sicherheit dazu entschlossen das Boarding etwas vorzuziehen. Wir öffnen nun die Tore und heißen sie willkommen auf unserer MS Rosta!
+2. Szene 
+Toni, Hinnerk, Willi
+Toni:  Mien  leeve Herrgott, is dat n grootet Schipp. Düsse veelen Decks kunn ik to letzte goar nicht mehr telln! (Die Männer sind schwer beeindruckt)
+Willi:	Ik haar blos regestreert dat wi irgendwoar tüschken Deck 5 und 7 use FRAULÜ verloren habbt.  Harriejasses, de Wiever bünt ja total dördreiht! Mien  Mäggie haff al bi`t vörbiloapen an‘ Pool ehren ersten Striet wegen eeinen Liegestauhl anfungen. 
+Hinnerk:    Un Lieschen haff sück den ersten Matrose an Hals ranschmeeten, weil se docht haff dat ist de Kapitän Struvenhus. Dann froagt se üm ok noch (äfft nach) Oh Käpt`n, mien  Käpt`n dür ik Vanoabend bi´t Oabenddeeten nicht direkt neven di sitten goan. Un as de arme Kerl dann segg haar, dat he man blos `n normaale Matrose is, haff se üm an Schienbeen träten und faucht he schüll ehr ut`n Wech goan! Also ik kenn mien  Lieschen so joa goar nich.
+Toni:    	Op alle Fäll hebbt wi de Schlödells för de Kabinen kregen… und wi bünt nu up´t rechte Deck… Sonnendeck Nr. 14… heller boaben mit de moiste Utsicht up´t oapene Meer … eene Getränkebar direkt vör use Kabinen… un … direkt unner us is dat Pooldeck … weet ji wat dat heet … beste Blick up Frischfleeischk…nu kiekt doch moal … oh neee… is dat? Dat is nu nich woahr ne… seggt moal ist da Gretchen doar unnen?
+Willi:	Wecke mennst du? De de sick dor nettegroad vör de Roothoarige breeit moakt as `n Pannkauken? Is dat Gretchen? Segg moal wat haff de joa n roden Kopp?  So lang kann se joa noch goar inne Sünne stoahn hammen.
+Toni:   	Ne, ne, dat is kien Sünnenbrand, de is up 180! Dat seeih ik sogoar van hier boaben. Ik froag mi blos worüm? 
+Hinnerk:  	Oh wachte…wachte… nu wörd dat spannend. Nu kummt ehre Finger dortau (zeigt es wi Gretchen es macht) …  moakt dormit Kriese inne luft, nur wörd de Kriese grötter und grötter… un geiht över in wildet Gestikuleren… oh neeeee …. Au, au nu haff Gretchen de Roothoarige schubst…
+Willi:	Ah, ah ik weet worüm dat dor geiht! Üm de Kabinen. Gretchen denkt glöv ik, dat dat ehre Kabine is doar unnen. (er spitzt die Ohren)  Weest moal aale heeil still, viellicht könnt wi wat mitkriegen woröver de proatet… Du blöde Kuh, du blöde, das is miene Kabine, loat mit dor nu dör anners schmiet ik die bisiete.
+Toni:	Nu langt da aver … (ruft runter) Gretchen! Gretchen! Du büst up´t falsche Deck, ji mööt hier noa us noar boaben koamen!
+Hinnerk+
+Willi:	AUUUUUUU!!!
+Hinnerk:  	Toni, du harst Gretchen nicht offlenken dürt,  dat haff de Rothoarige futt utnutzt un Gretchen rückwärts över die Poolliege schmeten!
+Willi:	Awer Hallo! Dor ligg se!  As n Maikäfer up´n Rüggen!
+Toni:   	Harrjiasses, dor fangt use Urlaub ja futt gaud an, un well mutt dat noasen weer büßen! (er ruft zuckersüß runter) Gretchen, mien  Leeve Gretchen, kumm fix noa mi noar boaben! Ik haff use Kabine al funnen und haff al anfangen mit´t inrümen. 
+Hinnerk:  	So Männer, nu awer fix … bevör de dreie boaben bünt möt wi seeihn dat wi Land gewinnt. (jeder geht in ein Zimmer).
+(Bühne ist kurz leer und dann kommen die Frauen rein. Mäggie und Lieschen stützen Gretchen, diese humpelt, ist verstrubbelt, Sonnenbrille verrutscht)
+       3. Szene 
+Mäggie, Lieschen, Gretchen
+Lieschen:	So Gretchen, sachte, sachte, Schritt vör Schritt. Geiht weer beter?
+Gretchen:	Aua, aua, aua – mi deit allet seehr! So’n blööde Hex! Ik bün mit vull karacho op mien  Steeisbeein fallen. Un nu? Wo schöll  ik denn bi dat Kapitäns-Dinner noch eeine gaude Figur moaken, wenn ik fast nich sitten kann?
+Mäggie:  So’n unverschoammtet Wif! Awer hest dat seeihn? Ik haff dorför ehren Ollen in ’n Pool schmeten.
+Lieschen:  	Un ik ehre Handtaschke achteran. Dor kiek, dor kannst du di erstmoal n bittken an de Reeling fastehoalen. 
+Gretchen:	Ach, danke ok – ji twee bünd halt de besten Frünndinen, de eein hammen kann. Herrgott, man kann sück doch ok moal in’t Zimmer verdaun, of nich? Un denn will man dat Wicht höflich seggen, dat dat mien Zimmer is – un wat moakt se? Se schubst mi so mir nix, dir nix över de Pool-Liege dröver.
+Mäggie:	Kiek … nu liggt se doar unnen! (ruft runter) Ja genau di meent wi! Du dösige Hornochs! Brukts goar nicht so dösig hier ruppkieken.
+Lieschen:  Leer man lever dat Water ut dien Handtaschke ut! Ik wull de doch blos moal kött testen, of Gucci ok schwemmen kann – aver diene Taschke haff den Test leider nich bestoahn …
+Mäggie:	Nu is die Gucci halt futschi! (alle drei lachen hämisch)
+Gretchen:	Ach nu geiht mit dat al vöhl beter. Miene Knoaken bünt weer an  Ort und Stee und bün nu blos noch heller gespannt up use Kabinen!
+(Türe geht auf, Toni kuckt heraus)
+4. Szene
+Mäggie, Lieschen, Gretchen, Toni, Hinnerk, Willi
+Toni:    Ach Gretchen, moi dat du al dor büst. Mien  Söite segg moal, hest du ok mien   Sünnenkräme inpackt? Nich dat an`t Enne weer mien  Kopphut ofpellt.
+Gretchen:	Seker, Toni! Blaaue Taschke unnen links (Toni verschwindet)
+Toni:	Dank di Gretchen!
+Lieschen:	Also und düt Böötken  hier, also das ist joa the (se) best of the (se) best.
+(Türe geht auf Hinnerk schaut raus)
+ Hinnerk:	Lieschen! Menschenskinner woar is denn mien  Hämorrhoiden-Salbe?
+Lieschen:  	In Kulturbüddel futt tägen de gröene Tannenpaste, Hämorrhoiden-Salbe blau. Nich allweer verwesseln! (Hinnerk geht wieder rein)
+Mäggie:  Un haff ji de veelen Poolse tellt? Also doar gifft dat joa sogoar eeine mit Wellen un Rutsche! Worbie bi de Rutschen müss man echt oppassen… dor haff ik annerletzt moal in Dörpen in´t Schwemmbad unfreeiwillig `n Tanga bi krägen un mien  Bikini-Top was ok nich mehr doar woar´t henhört. Haar ik dummerwies erst markt as ik torügge an miene Pool-liege was …
+(Türe geht auf Willi schaut raus)
+Willi:	Mäggie? Ah, Gott sei Dank du büst all doar. Mäggie, use Woaterberre Tohus is n` Schietkroam kägen düsse Schaukeleei hier. Woar üm Gotts Noamen bünt de Riesetabletten?
+Mäggie:   Lüttket rodet Täschken in ´n Rucksack… doar ist de Rieseapotheke binnen… awer Willi…blos eeine nähmen, nich weer dreeie…anners klappst du mi noasen weer tosamen.
+
+(Willi geht wieder rein)
+
+Gretchen:	(holt ein Zettel aus der Tasche) So dann loat us doch moal kieken wat dat Vanoabend to eeten gifft. As wi vörhen bie`t Speisesoal vorbiekoamen bünt haff ik düssen Menüvörschloag in so´n güldenen Schaukasten seein und direkt moal mitnoamen. So weet wi nu al woar wir us as erstet up stürzen moeten bie`t Dinner. 
+Lieschen:	Ja  man woar hest du denn wall den Kasten oapenkrägen bitte schön?
+
+Gretchen:	(holt einen kleinen Schraubenzieher oder Mien i-Akkuschrauber aus der Tasche)
+ Mit mien lüttket Warktüch. Haff ik ümmer för sükke Notfälle dorbie. 
+Mäggie:  Sümst is de Fru! 
+(Türe geht auf Toni schaut raus, hat jetzt Hut auf, Gesicht ist ganz weiß)
+
+Toni:	Gretchen, de Sünnenkräme haff ik nu funnen… und inschmeert haff ik mi ok all…. Awer ik find eenfach mien  Boadebüxe nich. Segg hest du de vergeten? 
+Gretchen:	Gott bewoar! Den Anblick willt wi doch de anneren Passagere woll ut de Ogen holln. Groote Kuffer, Sietentaschke mit Klettverschluss. Dor bünt de Badesoaken binnen. Un Toni, bevör du frachst… joa de Boadeschlappen ok.
+
+Toni:	(glücklich) Dank di Gretchen!
+Lieschen:   Gretchen   gäf mi moal dat Menü  her!   (nimmt   liest   vor) 
+Vorspeise  Carpaccio  (Carpazzio  gesprochen)  an  buntem  Salat. Wat is dat dann? Wachte steiht sogoar dorbie …dünne Schieven van roahet Rindfleeischk…
+
+Alle drei:	Roah?
+
+Mäggie: Pfui Deiwel, dat loat wi direkt ut, kiek doch moal, of dat viellicht n ördentliche Höhnersoppe gifft? 
+
+(Türe geht auf Hinnerk schaut raus)
+Hinnerk:  	Lieschen, ik haff mien  Hämorrhoiden-Salbe funnen un allens futt moi un heller veel inschmeert, man weet ja noit nich, woar dat allens mit Soltwoater reageert un so, nich woahr? 
+
+Lieschen:	Moi, joa joa, Moi hest du dat maokt mien  Leeve. Un moi dat wi alle dat du nu  ok genau weet.
+
+Hinnerk:   	Du awer Lieschen, woar is denn miene Badebüxe? Ik kann de eenfach nich finnen. Hest du de goar nich inpackt? …. Ik meen dat was joa nich schlimm miene Söte, dann treck ik eeinfach mien  Unnerbüxe an. Dat markt seker kieneine.  
+
+Lieschen:  	Ja Hinnerk, bi diene Schiesser-Feinripp, markt dat heel seker kieneine… Natürlich haff ik dien Badebüx inpackt De ligg sogoar heel boaben drup, du brukst blos den Kuffer opklappen. Doar ligg se…boaben drup. 
+
+(Mäggie hat zwischenzeitlich das Menü an sich genommen)
+
+Mäggie: 	Ne, Mist ne Höhnersoppe  gifft dat nich. Awer `ne Soppe  ist as tweiden Gang dorbie. „Kaltes Tomatensüppchen mit Basilikumschaum.“ Ja Dünnerschlach, de könnt sück ehrn Schum spoaren; schöllt se läwer de Soppe  warm moaken. Dat gifft doch nich, kolde Soppe, wat schöll dat dann? 
+Gretchen:	Viellichte könnt wi de joa froagen, of se us de Soppe  kött inne Mikro opwarmt. De wörd doch hier up´t Böttchen ergens ne Mikrowelle hammen. Un wo geiht dann wieder mit dat Menü? (nimmt Menükarte) Entrecot (EntreKOT gesprochen) mit Kartoffelschaum und Chimichurri (Tschimmitschurri gesprochen)
+Mäggie:  Wat hebbt de blos ümmer met ehren dösigen Schum. De schöllt moal läwer n ördentlichen Tuffelbreei moaken.
+
+Lieschen:  		EntreKOT? Dat hört sik awer goar nich gaud an, un wat schöll dat wän Schnurri-Schnurri? (zuckt mit den Schultern …Türe geht auf Willi schaut raus)
+Willi:	Mäggie! Mäggie! Also mi is ümmer noch so öwel in´t Lief. Ik haff nu al tweei Riesetabletten noamen, schöll ik noch… 
+Mäggie: 	…NEIN, schöllst du nich! Anners süchst du weer Regenbogenfarven wenn du noch eeine nimmst
+Willi:	Also gaud, dann müsst du awer noasen koamen un mi mien  Lief strieken. Un äh, Mäggie, ik haff nu miene Badebüxe antrocken… doar stimmt wat nich mit. De zwickt und zwackt und schluppt heel Tied tüschken miene Backen.
+Mäggie:	Willi! Du hest nich all weer miene Bikinibüxe antrocken so as´t fleetenmoal in Dörpen, woar wi bold rutschmeeten wassen wörn, Blos  wegen di.  Nochmoal to´t mitschrieven Roodet Dreieeck – miene Bikinibüx – blauet Viereck  - diene Badebüx! (zeigt dabei die Formen)
+
+
+
+Willi:	Au hoppla, dann wessel ik kött noch, awer Mäggie, weeist du ik wull die eeigentlich ok blots dien Bikini-Hösken all n biettken vörwarmen, dormit du dat noasen gemütlicher hest. 
+Mäggie:	Is al gaud Willi, hest gaud moakt!
+	(Willi freut sich und schließt die Türe)
+
+Gretchen:	So,  dann  loat us moal kieken wat dat för een Noahspiese gifft.
+    Eierlikörmousse mit Himbeeren – so nu bünt wi dorbie!
+
+Lieschen:  	Groodoardig, dann loat wi Gang 1-3 utfallen und nähmt 4-moal Eierlikör
+Mäggie:	Gaude Plan! Oh! Gretchen! Pack den Zeddel wech, doar unnen is de Kapitän Struvenhus!
+
+Lieschen:	Woar?
+
+Gretchen:	Woar? (fallen beide fast von der Reling)
+
+
+Mäggie:  	Na doar unnen! Doar lennt hei doch an de Palme! Au man is dat een Schnuckelsche oder? Kiekt moal, woar de güldene Knöppe up sien Uniform in de Sünne glitzert
+
+Lieschen: 		Na för den wörd ik ok moal öwer Board goahn, wenn he mi retten dö.
+Gretchen:	Awer blots mit Mund-zu-Mund-Beatmung! (alle drei lachen)
+
+Mäggie:	Kummt Mädels fix, he süch doch ut as wenn he blos up us wachtet, or nich? 
+(alle drei rücken sich den Busen zurecht und stolzieren raus)
+(Die Kabinentüren gehen gleichzeitig auf, die Männer kommen heraus, alle in Badekleidung + Bademantel mit Hut/Käppi, ganz weiß im Gesicht, Handtuch, Badelatschen, Willi trägt Socken, Toni und Willi haben einen Rucksack dabei)
+
+     5. Szene 
+Toni,Hinnerk, Willi
+
+Alle drei:	FERTIG!
+Toni:	Un doar schöll noch eene seggen, wi Mannslü  bünnt van use Fraulü afhängig. 
+
+Hinnerk:   Pah, so´n Tünkroam! Gaud ik haar wall `n bittken seuken mösst, awer dat ligg blos an düt komische System woar Lieschen de Kuffers packt. Ik wörde dat joa heel anners moaken… 
+
+Willi:	Joa ganz seker sogoar… Kuffer oapen moaken, allet rinstoppen un Deckel weer dichte… 
+
+Hinnerk:   	Net so ist dat! Un dann ringriepen, rummwöhlen, un dat antrecken wat de as erstet to packen kriegst. (alle lachen)
+Toni:   	Mode noar dat Taufallsprinzip! Woar bünt denn nu eegentlich use Fraulü allweer hen? (linst über die Reling) Joa ik weer verrückt…, doar klävt use Madams annen Kapitän as de Fleeigen up` n Mestbült (die andren schauen).
+
+Willi:	Würklich heller treffende Verfutt met` n ….Mestbült… Wat is denn dat vör eene… Sascha Hehn un Florian Silbereisen för Arme? Haff sik rutputzt as so´n Pfau mit siene dösigen güldenen Knöppe.
+Hinnerk:  	Also Willi, dat is de Kapitän… un dat is eene Kapitänsuniform… dat mutt he so drägen…is sien Deenstkleeidung …He haff de heele Verantworden för 6.000 Lüe hier ant Board. Un so´n grodet Schipp to manovreeren is seker ok kien Kinnerspoel.
+
+
+
+Willi:	Dat weet ik wall dat so´n manovreeren met heel völ Verantworden tohope kummt, ik bün joa nich brägenklötterig. Awer weet ji wat…mien  Schufkoar is al 35 Joahre olt, haff Dauken in´t Blech doar künnst beste Caribian-Steel-Drum up spölen und weegt 120 Pund ohne Fracht in de Koare. De Reifen is nett so as du Toni, wenn du Freeidoags ut Olker eierst. 
+		N‘ neeien dür ik mi nich koapen weil Mäggie meent de deit noch. Siet 35 Joahr vör ik düsse Koare all ….unfallfreei! dör usen Goarn…. Dat is nich ohne segg ik jau … dat is wat heel anners as hier n bittken mit`n Böötken  rümtauvörn… DAT is  kien Kinnerspoel! Vör mi is düsse Rümschipperei joa wall n‘ Klacks. Düssen Lackoape doar unnen brukt sück also goar nix intobilln un sick so an use Fraulü ranschmieten.
+
+Toni:   	Also Willi, ik will joa nix seggen, awer de „Lackoape“ schmitt sück goar nich an use Fraulü ran! Dat is annersrüm! De dreei hebbt n Kries beldet und hebbt üm inkesselt … den armen Kerl. Un nu kiekt moal, de weet goar nich wat mit üm passeert (lacht)…. Dat is use Chance… so lange he um sien Läben bangt hebbt wi tied vör `n moiet Sünnenbad… wat meen ji? 
+
+Hinnerk und Toni:	Gaude Idee!
+Hinnerk:   	Ik bün inschmeert van boven bis unnen!  Weil weet ji wenn du so hell büst as ik, kann dat heel gefaahrlich weern. Büst du heller as brünett, schmeer di in bis in de Rosett! Un dat meen ik wortwörtlich! 
+(alle breiten ihr Handtuch aus, ziehen Bademantel aus, legen sich auf die drei Liegestühle, die in der Mitte platziert sind)
+Toni:   Dann müsst du dich nu awer tominst ok dreihn as n Hähnken upn Grillspieß… dormit sük dien Inschmeerereie ook lohnt haff. (lacht)
+Willi:	(lacht kurz mit, merkt dann dass ihm doch übel ist) Kerl ne, mi geiht  dat goar nich goud… düsse Schaukeleie moakt mi so richtig fix und fattich,,,, un van de Riesetabletten wörd mi heel schummrig und dorto krieg ik n richtig pelzige Tunge. Ik haff all `n richtig Fell in´t Muul.
+
+Hinnerk:    Du Willi dorbi haff wi doch noch goar nich ofleggt, wi steiht joa noch in Hoafen… nu stell di moal vör woar dat is wenn wir ersmoal op oapene See bünt. Dat geiht dann blots noch hooog un runner…. Hooooooog und runner… hoooooooooooog un runner (zeigt es Willi dabei, der wigt mit)… dat wörd n` wilden Ritt doar kannst di up verloaten…Weest du ik haff moal hört… wenn du seekrank büst… dann hest du Angst dat du övern Deister geihst… awer wenn du richtig seekrank büst…. dann hest du sogoar Angst dat du an´t Läben blievst… man n` Appelkauken schöll helpen… schmeckt nett so gaud up´n Hen- un Rückwech… 
+
+… Awer segg moal Willi du wörst ja upnmoal heller gröen in´t Gesicht, wat is denn los?
+
+
+Toni:	Hinnerk, nu hoal moal dien Sabbel und loat Willi tovreden, bevör he över de Reling geiht to´n Fischkes fauern… (deutet sich übergeben an… macht siene n Rucksack auf, holt drei Bügelbier raus) Doar! Hier gifft dat moal wieder…. Medizin…, dat is DAT Middel tegen Övelkeit! Weeist du Willi, doarmit schaukelt dat an Enne binnen net so as buten…et kummmt dann allet in Gliekgewicht!  (Alle drei lassen die Flaschen ploppen)
+Willi:	Toni! Dat hört sück richtich logisch an! Du harrst Doktor wern schöllt!
+
+Alle drei:	PROST!(trinken,Willi trinkt in EX aus, die anderen beiden schauen überrascht)
+
+Willi:	So, nu geiht mir dat all beter! Hest du noch wat mehr van düsse Medizin? (kriegt n zweites)
+
+Hinnerk:	Willi worüm hest du eegentlich Söcken an, du hest doch bi düssen Sünnenschien kien kolle Feute or wat?
+Willi:	(selbstverständlich) Ne hier up de Poolliege nich, awer ümmer wenn ik schwimmen goah krieg ik kolle Feute. 
+
+Hinnerk:	Kolle Feute bie`t Schwemmen (schüttel mit dem Kopf und schmunzelt) un wat is mit diene Ohrn?
+
+Willi:	Na de bünd natürlik ook kolt, fröher harr ik dorvör joa ümmer Ohrenschützkers dorbi hatt, vör´t ünnerduken. De loat ik nu awer lever wech. Haff ji dat moal probeert? De suugt sük ünner Woater bi den Druck ümmer faste so dat `n Vakuum entsteiht. Fleeten Sömmer möss ik dornoa twee Weken mit Ohrenschützkers bi 38°C sümmerliche Temperaturen rümloapen bis sück dat Vakuum weer löst haff. Dat was n Tortur segg ik jau… de kann ik nich nochmoal bruken.
+
+Toni:	Hinnerk bi usen Willi was glöv ik ok vörher al Vakuum tüschken de Ohren (lachen beide) 
+
+Willi:	Ha-Ha! Oh… bold vergeten! (kramt Solariumbrillen raus) Vör use Extra Sekerheet un Schutz! Nich dat use Oogen mörgen nich mehr daut.
+
+Toni:   	Ha Willi… mien  beste… ik nehm alls torügge, of un tau brannen dor boaben doch noch Luchter bi di. 
+
+(Ziehen die Brillen auf, lehnen sich zurück und quatschen mit geschlossenen Augen weiter)
+Hinnerk:  	Tau lang könnt wi awer uk so un so nich liggen blieven, ik bün doar doch wall heller empfindlich!
+Willi+
+Toni:	Wicht!
+
+
+
+Hinnerk:  	Wat Wicht?  Nix Wicht! Haff ji moal n Sünnbrand op jaue Nippels hatt? Dat is allet annere as moi segg ik jau (die beiden andren lachen hämisch)
+…Dor gifft dat goar nix tau lachen…. Ik bün moal in´t Freeboad inschlöppt …un eeigentlich haar doar blot Lieschen schuld an… also nich an´t inschloapen… awer de haar mi joa moal inschmeeren künnt. Mien  leeive Scholli, bis ik dorachter köm haar ik Nippels as Schnullers dunkelrood! Ik möös dreei lange Doage met Löckers in´t T-Shirt rümloapen weil ik dat Schürn an den Stoff nich erdrägen kunn. 
+Willi:	(lacht) Man mutt sück dat erstmoal woarhaftig vörstellen!
+
+Toni:   	Leever nich! Awer Hinnerk du hest al recht, tau lang blievt wi hier nich liggen… awer seker nich wägen de Sünne. Ik glöv ehr dat wi anners de Doamen up düsse Krüzer veel to veel in Verlegenheet brengt.  Dat könt wi de joa nich andaun.
+
+Hinnerk:  	… Ah…. Ik verstoah… wegen use Astral Körper!!!! 
+
+(Alle drei verschränken die Arme hinterm Kopf und begeben sich in möchtegern Sexy Präsentations-Pose)
+Toni:	Heeil genau! Ik haff de letzte Tied in´t Huus extra vör usen Trip n bittken traineert.  
+
+Willi:	Ik ok!
+
+Toni:  	Du ok Willi? (nimmt Brille ab und begutachtet ihn) Wat hest du dann traineert?  Diene Kaumuskeln … un diene Domen vör de Fernbedeeinung or wat? 
+
+(jetzt nehmen auch die anderen die Brillen ab)
+Willi:	Von wegen! Ik haff mi bi de Gymnastik-Turn-Gruppe in´t Leeier Sports-Hus anmeldt
+
+Hinnerk:	Gymnastik?
+
+Willi:	Joa, ik was düttmoal to loate mit anmelden und dat was de letzte Kurs de noch free was. Kamasutra was all vull un Ikebanda haff ik fleeten joar all moakt. De is ja jeden Maandag avend in´t StruvenHus. 
+Toni:  	Moment moal, nu hest du aver wat dörnanner broacht. Moandag noabends is doch de Schwangeschaftsvörbereeidung in´t StruvenHus  un kien Ikebanda!
+Willi:	Joa, heel genau! Spann du doch moal du dien Beckenboden an – dat ist goar nich so licht segg ik di! Un bi de Övelkeit vörhen in mien  Koje, doar haff de Atemüvungen ok heller holpen (macht die Atemübungen vor!)
+
+Hinnerk:	Also Willi bi die is ok Hoppen und Moalt verlorn.
+
+
+Willi:	Wieso? Dat is heel man wat schwoor! Doar bün ik fix un alle wenn ik noar Huus hen koame. Schade dat ik düsse Weeke nich doar ween kann, wi hebbt düsse Weeke de Besichtigung van´t Kreisssaal up`n Programm.
+
+Toni:   	Den Kreißsaal besichtigen, aha! Du büst wall ok bi diene Geburt direkt moal as erstet vanne Bettkante falln, anners kann ik mi dat nu würklich nich mehr erklärn…
+Woar ok ümmer…, weet ji wat wi bold vergeten habbt? Us Fernkiekers Marke  Eeigenbau, weet ji wat ik meein?
+
+Hinnerk:   	Au stimmt! Extra för usen Urlaub tosaoamentimmert doarmit wi nix verpasst. 
+
+ (Toni holt zwischenzeitlich ein riesengroßes Fernglas aus dem Rucksack, extra lange Objektive!) 
+
+Toni:    (In Pose präsentierend) Glotzi3000 … de Fernkieker  taun fernkieken… also richtich fern fernkieken… fern so fern as man man fernkieken kann fern kieken… so fern kieken…
+Willi:	…Jo jo weet wi doch… un nu loat us de erstmoal testen of de ok net so funktionieert as wi us dat vörstellt hebbt. Was ok ja goar nich so licht dat allens so tosoamentobaun, de oole Jagd-Fernkieker van mien  Opa Willi as Basis! 
+
+Toni:  	Nett so is dat… un mit de Kristalldingers … oder in mien  Fachjargon ok „Prismen“ nömmt … de ik vör us in´t Internetz bi „Umet“ bestellt haff … de warn goar nich so düer… haff blot n Settken durt… Direktimport ut China.
+Hinnerk:  	Un 3 Spezial-Lupen-Glöser van miene Tante Irmi de sei ümmer taut Zeitung läsen bruukt haff, de wass joa  so wat van blind! De habbt wi doar denn ok noch inbastelt. 
+
+Willi:	Un taun kröndet Enne haff wi den Boden van een Cola-Flasch noamen. Noa diene Berechnung Toni, ist dat nu  de scharpste Fernkieker up de Welt. Worbie man mutt extrem uppassen dat man dorbie siene Netzhuut nich verbrutzelt. 
+Toni:  	Dorüm haff wi doch use Sekerheitsvorkeerungen mitnoamen (er zieht eine witzige Schweißerbrille o.ä. auf, steht auf und schaut dann durchs Fernglas) Wow! Scharp as man wat! Ik dreih dör Männers… wi bünt genial…allens vull  …. vull met halfnackte Fraulü… un moie Bikinis… doar is sogoar eeine ohne Bikini… gifft joa nich, de haff `n Piercing in Buuknoavel… kann ik so seehn. So schoarp is use Fernkieker! 
+Hinnerk:  	Wo? Ik seeih blos  use Fraulü und de hebbt ….Gott wees gnädig… goar kien Bikini an… un Piercing hebbt de seker ok kiene!
+
+Toni:	Awer seeiht ji denn nich, doar an Strand!!
+Willi:	Wat vörn Strand??? Wi steiht doch ümmer noch in Hoaven. Toni dat is nicht to glöven wat du doar vertellst, doar stimmt wat nich mit.
+Toni:  	Doch seker! Ik seeih doch den Strand!!! Wachte doar is n Schild… dor steiht wat up „ K – O – R – S – I – K – A… Korsika! 
+
+(er nimmt das Fernglas ab, die Männer starren sich an)
+Hinnerk:	Korsika! (ungläubig)
+
+Willi:	Von Savona aus? (Toni nickt und grinst)
+Toni:   	Wi könnt van Savona bis noar Korsika röver kieken! Ik segg blos …. Overköperfreei mit Buuknoavelpiercing!!! …. 
+(Die Männer streiten sich ums Fernglas, reißen es sich gegenseitg im Kreis immer wieder aus der Hand, streiten sich wi kleine jungs….)
+
+Hinnerk+
+Willi:	Ik will ook, geev mi dat Dinge nu moal… neee nu bün ik an de Riege… ne loat mi erst nomoal….  
+(es kommt eine Durchsage)
+
+Durchsage „Meine sehr verehrten Passagiere, bitte finden sie sich alle auf dem Pooldeck ein! Alle Passagiere auf das Pooldeck bitte. Hier findet in wenigen Mien uten die Sicherheitseinweisung statt. Sicherheitseinweisung auf dem Pooldeck! Es müssen alle Passagiere anwesend sein, sonst verlässt das Schiff den Hafen nicht. Sicherheitseinweisung!“
+
+(Willi holt Schwimmflügel raus und beginnt diese aufzublasen)
+
+Hinnerk:  (enttäuscht mit Fernglas in der Hand) Och wat schoade! Nu woar dat neddegroad so interessant wörn is! Ik willl nich tau düsse dösige Sekerheetsünnerwiesung!
+Toni:  	Eben! Dat is doch allens sümsterklärnd, wenn du in´t Woater fallst mutt du schwemmen. Kannst du nich schwemmen mutt du duken …(lacht)
+Willi:	So, ik bün faddich met Wark, kann los goahn! (die andren starren ihn an) Ja ji bruukt goar nich so dösig kieken, för jau haff ik ook wecke dorbie, Blots  för den Notfall
+Hinnerk:	…Schwemmflögelchen?!?!
+
+Willi:	Ha ja kloar, mit diene Plautze, passt du doch hier so un so in kien Rettungsring rin. Un nu koamt, ik will nich de Letzte wän.
+(geht ab)
+Toni:	(resigniert) Kummm Hinnerk, nich noadenken… nich upregen…Nutzt joa doch nix… 
+
+Hinnerk:   Awar koame wat wull, Schwemmflögel treck ik noit nich an! (Männer gehen ab)
+
+(Bühne ist kurz leer dann kommen die Frauen mit dem Kapitän Struvenhus im Schlepptau, jede kämpft um einen Platz an siene r Seite)
+6. Szene
+Gretchen, Lieschen, Mäggie, Kapitän
+Gretchen:	Also, Leeve  Herr Kapitän Struvenhus, dat se sück extra blos för us eere Tied nähmt un us persönliche Sekerheetsünnerwisung geevt… also dat is joa wirklich sowat van moi… wi freit us soooo heller.
+
+Kapitän: 	Tja, dank jauen Liebreiz miene leeve Doamen, bleev mi joa bold nix anners övrig, as de Sekerheitsünnerwisung persönlich vörtaunehmen. Awer ik mutt jau seggen, so völ Tied bliff nich, ik mutt direkt dornoa up de Kommandobrügge, wi willt vandoage joa up tied ut` n Hoaven utloapen, nich woar?
+Mäggie:  	Ach wat seker doch Herr Kapitän Struvenhus, nich dat wi an Enne ergens noch toloate bünt… dat will wi seker nicht. Man eene Froage haar ik doar noch… bünt se Vanoabend ook bi´t Kapitänsdinner dorbie?  
+
+Kapitän: 	(verblüfft) Of ik bi´t Kapitänsdinner dorbi bün? Ähm also jaaaaaaa, dat nähm ik doch an.
+Lieschen:  	Mäggie, denn bruukst du die jo wall nich n‘ heelen Oabend  kägen den Kapitän quetschen wa, ik will doar ok moal sitten goan! 
+Gretchen:	Dat is doch heel kloar, Mäggie sitt bi de Vörspeese bi üm, Lieschen bi´n Hooptdgang … (verführerisch) un ik… bün siene Noaspeise …. (verbessert sich schnell) Also ik meen tau de Noaspeise ik. 
+Kapitätn.:	Ik denk de Doamen wörd sück wall eeinig, un vör allem möt wi joa ook noch `n Platz vör jaue Gatten finnen. 
+
+Mäggie:	Wat för Gatten?...
+Lieschen:	Na dien Willi!
+
+Mäggie:  Ach soooooo, joa, joa stimmt, de bünt joa ok noch doar… awer de könnt wi ook in´t Speesesoal heel noar achtern setten. De freit sück wenn se man överhaupt wat to Eeten kriet. 
+
+Lieschen:  	(will schlau sein) Also use Mannslü bünt ja nu ook egoal… Ik haar doar moal eeine Froage Herr Kapitän Struvenhus…Weet se ik haff mi up düsse Krüzfoart joa all n` bittken vorbereeidet und veel läsen dormit ik ok mitproaten kann. Also wat mi nu noch besünners interesseeren dö…. Woveel Meter bünt wi eegentlich över den Meerespeegel nu genau.
+Kapitän:	Woveel Meter över den Meeresspeegel, also nu bün ik awer sprachlos… 
+
+Gretchen:	Ja dat kann ik mi vörstelln. Nich jede Passagier is so gaud beläsen as wi oder? Wat ik nu noch gern weeten wull… up wecke Siete van düt Böötken  geiht mörgen eeigentlich de Sünne up?
+
+Kapitän:	(ungläubig) Up de Hinföhrt Backbord, up de Rückfoart Stürbord
+
+Alle drei:	Faszinierend!
+Mäggie:	Un noch eeine letzte Froag… Is in Pool Soltwoater oder Seutwoater?
+
+Kapitän:	In den Pools? Jao doar is Soltwoater binnen.
+
+Mäggie:	Ahhhh! Dorüm ok de Wellen!
+
+Kapitän: 	Miene Doamen, se bünt woahrlich utgewönliche Erscheeinungen… sücke geballte Kompetenz up eein Bült haff ik noit nich seeihn.
+Alle drei:  	Danke! (sind sehr geschmeichelt) 
+(Es kommt eine Durchsage WIR STARTEN NUN MIT DER SICHERHEITSEINWEISUNG!)
+Kapitän: Ah dat is nur de Opraup vör de Sekerheetsünnerwiesung. Wichtig is nu dat ji heel genau oppasst wat ik segge, wenn eeine Gefoahrensituation intreeten deit möt ji genau weeten wat to daun is. OKAY?
+
+Alle drei:	Eye-Eye, Kapitän! (salutieren)
+
+Kapitän:	(Spult auf Hochdeutsch ab) Es gibt zwei verschiedene Warnsignale auf dem Schiff dreimal kurz tuten bedeutet Mann über Bord! Sollten sie in dem Fall Sichtkontakt zu der Person haben die in Seenot ist, nehmen sie den nächstbesten Schwimmring und werfen diesen über Bord in Richtung der Person.
+
+Mäggie:	Mist in´t werfen was ik noch noit nich gaud!
+
+Kapitän: 	Das zweite Warnsignal ist ein langer Hupton, das bedeutet Unruhige See, Schwimmwesten anziehen und sicheren Platz suchen! 
+Und einmal kurze Sirene bedeutet Entwarnung! 
+Zu Testzwecken wird nun der Probealarm ausgelöst, damit die Passagiere wissen, wi sich das anhört, wenn es ernst wird! 
+(schaut auf die Armbanduhr) 
+
+Und der Alarm geht los in 3-2-1
+
+(es tutet dreimal kurz, die Frauen zählen mit den Fingern mit)
+Alle drei:	Mann öwer Bord! (holen die Rettungsringe und werfen diese über Bord)
+Kapitän: 	Halt! Dat is doch bloß ne Probe! Se dürt doch nich… to loate! (fasst sich an den Kopf, schüttelt diesen, holt ein Funkgerät raus) Kapitän Struvenhus an Crew, Kapitän Struvenhus an Crew 3 neue Rettungsringe aufs Sonnendeck bitte!
+Gretchen:	Also dat haff joa all moal gaud klappt wa?
+
+Lieschen:  	Find ik ok, wi bünt superfix wän. As „Mr. Blitz“ … „Piu…Piu“ (macht dabei schnelle Handbewegungen)
+
+(es ertönt der nächste Warnton – langer Hupton, Frauen erstarren hören zu)
+
+Mäggie: Langer Hupton! In Sicherheit bringen! (Alle drei werfen sich an den Kapitän Struvenhus und umklammern ihn)
+Kapitän:	(schwankt) Awer miene Doamen, se erdrückt mi joa, nu bidde, bidde loat se mi doch löss, Hülpe…Hülpe ik krich kiene Luft mehr. (es ertönt ein kurzer Hupton)
+Lieschen:	Vörbi… Dat was de Ton vör Entwarnung!  (Lieschen und Mäggie lassen los, Gretchen hängt noch weiter dran … Kapitän Struvenhus schaut erst erleichter… dann auf Gretchen mit einem Stirnrunzeln…) 
+Kapitän:	Ähhhhm…
+Mäggie: 	Gretchen? Is Vörbi!!! kannst löss loaten…
+Gretchen: 	Oh joa… schoade… lässt ganz langsam vom Kapitän ab…
+Kapitän:	Puh, Gott sei Dank! Also miene Doamen, ik mutt seggen…
+Gretchen:	… dat was sensationell…
+Lieschen:	Wi! Bünt sensationell wän, oder Hr. Kapitän?
+Kapitän: 	Ähm, joa natürlich. Ik bün noch heel ut Oatem, so hebbt se mi begeestert  (hustet) Awer nu mutt ik würklich heller nödig torügge up de Kommandobrügge 
+De Tied löppt… awer bünt se sück seker, ji wörd mi in Erinnerung blieven … (hustet, geht ab)
+Mäggie:	Haff ik dat hört? Wi  wörd üm in Erinnerung blieven!
+
+Gretchen:	(schwärmend) Haaaa, ik glöv wi hebbt n` dicket Steein in Brett …. Bi Käpt´n Struvenhus
+
+Lieschen:	Woarschienlich bünt doar nich veele Passagiere so fix van Begreep as wi Dreeie! (Es ertönt das Schiffshorn)
+Mäggie:	Oh nu geiht lös, oh ik spür et all, ji ook? Dat ruckelt wi Sau!
+(alle drei beginnen sich so zu bewegen, als ob das Boot rüttelt)
+
+Gretchen:	Oha ik glöv nu haff he den Rückwartsgang rinmoakt. Oh man, ik bün heller opgeregt, dat Böötken  föhrt! Dat Böööööötchen föhrt!
+Lieschen:	Un nu kiekt moal de Lüüe an´t Hoavenkant, de winkt us alle tau (aninmirt das Publikumm zum winken) is dat nich moi! 
+	(alle drei holen ein weißes Taschentuch raus und winken an der Reling) 
+Alle: 	Tschüüühüüüüsss, arrivederci, ciao-ciao, wi goat up grode Foahrt!
+(Musikienspieler „Time to say goodbye)
+
+Hinweis: Für die letzte Szene könnte jeder Gast eine kleine Packung Taschentücher auf den Stuhl bedruckt mit MS-Rosta – Theaterverein Lehe e.V., auch als Souvenier zum mitnehmen bekommen?
+
+Vorhang – Ende 1. Akt!
+
+2. Akt
+(Es ist ein Tag später, Vorhang öffnet sich, man hört Schiffsgeräusche, Möwengeschrei, eine der Kabinentüren geht auf, Toni und Gretchen kommen heraus, das Fernglas der Männer liegt noch auf den Liegestühlen)
+
+  1. Szene 
+Gretchen, Toni
+Gretchen:	Ach Toni, ik haff so gaud schloapen, dat schaukeln van düt Bööötcken haff mi heel sanft schloapen loaten. (glückselig).
+Toni:  	Gretchen, dat Schipp is kien Böötken , dü büst doch güstern Oabend ok dorbie ween, as wi noa dat Kapitänsdinner de Kommandobrügge bekieken düssen.
+
+Gretchen:	Ja Lüe, doar gaff dat joa goar kien Stürrad! Blos 1.000 Knöppe un Schalters un Luchter. 
+
+Toni:  	Net so ist dat Gretchen, dat is ja ok kien Boot met Stürrad ut Holt! Doar most all richtich wat up´n Kastn hammen üm dat to stüren. Also gaud, ik wörde mi dat ja wall tautraun, ik haff dat joa ümmer alles futt up` n Kastn un güstern Oabend haff ik ja ook futt kapeert woar dat hier allens fuktioneert.
+
+Gretchen:	Ik weet wall dat du `n cleveren Kerl büst, Toni mien  Söten… man dat is bis nu in use 30 Ehejoahren heel an mi vörbie goan. Awer nu  man gau mien  lüttken Käpten, wi goat all moal fröhstücken, bevör de anneren ut de Koje koamt.
+
+ (gehen ab) 
+
+(Türe geht auf, Hinnerk und Lieschen kommen heraus)
+
+   2. Szene 
+Hinnerk, Lieschen
+Lieschen:  	Hinnerk, Hinnerk kiek! Wi bünt op de oapene Seei, hach is dat moi hier, oder meenst nich? Du segg moal, woar föhrt wi nochmaol genau hen?
+Hinnerk:	Noar Marseille! … Marseille Lieschen!
+
+Lieschen:	Ach wat moi! Doar waren wi joa al lang nich mehr! 
+Hinnerk:	Lieschen, wi waren doch noch noit nich in Marseille… wat du meenst is Mainz… 
+
+Lieschen:	Marseille, Mainz… egoal – Hauptsoak wi bünt nich in´t Hus
+
+
+Hinnerk:  		Doar hest du allerdings recht. Ach dat is ok moi, wenn man so op de Seei rutkiek und sük de frische Briese üm de Nöse weihen loaten kann. Un dat Eeten is ook goar nich so leeip. Ik haar mi vörnoamen, bi´t Oabendeeten ut jede Kummme an´t Buffet wat to probeeren… un ik haff dat schafft.. dat will wat heeiten.
+
+Lieschen: 	Joa, allerdings hest du die joa dien Büxentaschke vullstoppt, bis nix mehr ringüng, also Hinnerk nich dat du us noch van Fleeischk offfallst (schmunzelt dabei) 
+Hinnerk:   	Also as ik Vannacht wacker wörn bün, weil ik up´n Pott möss, was ik bliede dat ik wat as Wegzehrung inpackt haar!
+Lieschen:  	Up alle Fälle was dat Kapitänsdinner eeinfaach wunnerboar, wi hebbt joa reein taufällig direkt bi´n Kapitän an Dischk seten. Un dann düsse Kommandobrügge! Also düsse Struvenhus, dat is joa n` Boas van Kerl…woar de dat allet so bedeeinen kann!
+
+Hinnerk:  	Pff! Boas van Kerl… ik haff güstern Oabend futt seein woar dat allens funktioneert mit de heelen Knöppe. Lieschen mit mien  utgeprägten technischen Verstand, haff ik de Loage futt begrepen. Dat was för mi dat minste Problem… düt Schipp över de söben Weltmeere tau stürn, moak ik mit links…
+       3. Szene 
+Mäggie, Lieschen, Hinnerk
+
+(Türe geht auf, Mäggie kommt raus)
+
+Mäggie:	Mohoiiiiiiiin! Well stürt hier woar hen?
+Lieschen:  		Mien  Hinnerk schweeft all weer heel boaben. He meent he künn dat Boot hier stürrn as Käpt´n Hook… mit links… (deutet hämisch an)
+
+Mäggie: 	Ach, dat haff Willi mi güstern Oabend ook noch in´t Berre wies moaken wullt… he meende he haar joa n` VHS Kurs moakt… „ Mien  ferngestürdet Boot un ik“, veel leeper künn dat hier ook nich ween, meent he. 
+Hinnerk:	Woar is de eegentlich, schlöpp de noch oder wat? 
+
+Mäggie: 	Nee, ik will blos moal in Ruhe fröhstücken, de is mi Vanmörgen all weer so op´n Sack goan… dörum haff ik dat Schild „Bitte nicht stören“ van binnen anne Döre hangen… nu traut he sück nich mehr rut. Kumm Lieschen, wi goat al moal vör… de Gretchen haff de ersten dree Brötckes bestimmt al up.
+
+ (Die Frauen gehen ab, Hinnerk geht an die Türe von Willi und klopft)
+
+
+
+  4. Szene 
+Willi, Hinnerk
+Willi:	(ruft laut, nicht zu sehen) PSSCHHT! Bidde nich störn! Schwiegt still dor buten!
+
+Hinnerk:	(öffnet die Türe) Willi, kumm doar rut du Döskopp!
+
+Willi:	Dür wi denn nu al rut?
+
+Hinnerk:   	Ja, wi dürt rut, kumm man Willi! Weest du wat, wi beide goat nu fix wat fröhstücken, dormit dien Hirn moal weer in Wallung kummt.
+Willi:	Fröhstück?!? Ja doar bün ik ja moal heel gespannt… woar de up´n Meer hier Vanmörgen wall frische Eier för mien  Omelette herkrieget. 
+Hinnerk:	De hebbt Höhners dorbie!
+
+Willi:	Brutal! De denkt hier ok echt an allet!
+
+
+(Gehen ab, Bühne ist leer, dann tritt Kapitän Struvenhus auf mit Britta und Gitta. Er steht in der Mitte, die Doamen stupsen ihn rechts und links an, wenn sie reden)
+5. Szene
+Britta, Gitta, Struvenhus
+
+Kapitän:  Mien  leeve Doamen. Dat is mi eeine außerordentliche Freide, dat ik jau up mien  Schipp MS Rosta willkommen heeten dür! Seei, as Inhaberinnen van de gröttste düttschke Reisebüros „Ahoi-Reisen“ … Woar warn nochmoal ehre Noamen?
+Britta:	Britta
+
+Gitta:	un Gitta
+
+Britta:	Strohbach
+
+Gitta:	Strümpfelbaum
+
+Kapitän:	Ah Frau Britta Strohbach und Frau Gitta Strümpfelbaum dat is mi….
+Britta:	…Nee! Wi heet Britta Strohbach-Strümpfelbaum un…
+
+Gitta:	… Gitta Strohbach-Strümpfelbaum un wi bünt…
+
+Britta:	…Tweieiige Twillinge! All in de Kinnerstove bünt wi anfangen…
+
+Gitta:	…use Reisebüro optobaun. De erste Reisen, de wi anboan hebbt…
+
+Britta:	… bünt taun Sans-See goan. De warn immer utverköfft, dat was domoals…
+Gitta:	… usen ersten Kassenschlager! Dornoa hebbt wi us up Urlaub an´t Meer, See und Fluss… spezialiseert… wi hebbt expandeert un… 
+Britta:	… 228 Reisebüros in heel Dütschland oapen moakt.
+
+Gitta:	 Für wenig Geld…
+
+Britta:	…reist du bei Ahoi-Reisen um die Welt!
+
+Kapitän: 	Also dorüm loat se mi jau up use Schipp willkommen heeten. Ik hoop sehr, dat use Schipp de MS Rosta et dann tastächlich ook in dat Programm van jau Reisebüro schafft. Ik haff vör jau de besten Kabinen reserveert… dat versteiht sück van sümst.
+
+Gitta:	Heel genau dorüm bünt wi joa doar, üm…
+Britta:	…uns een Beld van jau Schipp to moaken. Blos  de besten Reiseangebote… 
+
+Gitta:	schafft dat an Enne in use Katalog! Un tau betoalen mutt dat an Enne ook noch ween.
+
+Kapitän:	Versteiht sück van sümst ! Allens van  feinsten taun gauden Pries. 
+Britta:	Wi leegt Wert op gaudet Eeten un persönliche Betreuung… Gitta:	und natürlich ook up gaude Ünnerhollung!
+Kapitän.:	Allens kien Problem, dat hört allens tau usen Standard! Se krieget Vandoage noch n` Kostprobe! Ik persönlich, weer jau hier in use Pünten-Bar (zeigt auf die kleine Bar) eein Kapitän-Struvenhus-Cocktail präsenteeren, dorvör bün ik in heel Europa bekannt. Usen Sport-Animations-Programm is legendääääär und als afsolutet Highlight steiht noch use Travestie-Muscialshow an, mit de heel bekannten Drag-Queens Carla Cayenne, Pippa Pepper und Lulu la Belle.
+
+Britta:	Also van jau besünnere Musical-Show haff wi all hört, doran haff wi al hoge Erwartungen…  un wenn…
+
+Gitta:	dann noch düsse Sport-Animation hollt wat se verspreken deit…
+
+Britta:	… hebbt wi nix dorkägen, dat wi jau Schipp de MS Rosta in de nächsten Saison… 
+
+Gitta:	…in usen Katalog mit opnehmt. Ümso beeter ji jau hier anstellt, ümso grötter wörd jaue Chancen… se weet seker heel genau wovöle Kunnen wi in heel Dütschland hebbt.
+
+
+Kapitän:	(erfreut) Im Katalog van Ahoi-Reisen! Dat is mien  gröttsten Dröm! Miene Doamen ik haff för jau den besten Dischk in use Fröhstücksrestaurant „Venusmuschel“ reserveert… Dür ik jau an den Dischk begleiten?
+
+Britta:	Nee, ne, völen Dank ok…
+
+Gitta:	…dat find wi seker ook al sümst! Wi seeiht us dann loater…
+
+Britta:	bi´t Kapitän-Struvenhus-Cocktail!
+Kapitän:	Dann wünsch ik jau `n gauden Appetit un frei mi al up use Cocktailstünn! 
+(die Doamen gehen ab) 
+
+Oh man dat dürt nich scheeif goan, wi möt dat in de Katalog schaffen. Dat Reisebüro „Ahoi-Reisen“ is eeine van de renomerteste in heel Dütschland, wenn wi dat schaffen, kriegt wi mehr Passagiere up´t Schipp, ´n Barg meehr Geld inne Kass… un ik krieg  mien  letzdet Ofteken dat noch fählt! (klopft sich auf die Brust) Dat mutt klappen! (er schaut aufs Meer hinaus) Seei ik dat richtig? Bünt dat Delfine doar achtern? Dat was joa sensationell, doar künn ik joa futt ne Dörsoage moaken. Dat find de Passageere joa immer moi. Ach wat` n Taufall, dor ligg joa `n Fernkieker. (nimmt das Fernglas und schaut durch, erschrickt) Huch is dat Moby Dick? So dichte bi! Ik seeih joa sogoar dat de Delfin Karies an de Kusen achtern in Muul haff. Wat´n scharpen Fernkieker ik dor tau packen kregen hebb… Moment! Autsch … miene Oogen! (legt das Fernglas weg) Miene Ooogen!!! (wird panisch) Ik kann nix mehr seeihn! Ik heb miene Oogen verbrannt!
+
+6. Szene
+Gretchen, Mäggie, Lieschen, Kapitän
+(Gretchen, Lieschen und Mäggie kommen, Kapitän Schifferlein tapst blind herum)
+
+Mäggie:	Harriejasses, bün ick vullfreten, un dat al bi´t Fröhstück.
+
+Gretchen:	Ik uk Dunnerwedder! Gott sei Dank, ik haff en Kleeid an, dat spannt nix üm de Buuk! Aver wenn dat so wieder geiht, denn süch man boald mien  Bikini nich mehr, weil de direkt tüschgen miene Speckrullen verschwinden deiht, aver betoahlt is betoahlt! 
+
+Lieschen:  Ik haff allens, wat ik nich mehr äten kunn, eenfach inpackt! (holt Tupperdosen aus der Tasche) Verschenkt wörd hier nix!
+
+Kapitän:	Halloo? Is doar een? Ik bruuk Hülpe!
+
+Mäggie: 	Ach Herr Kapitän Struvenhus, wat is denn los? Mööt se nicht an de Stüür von düt Böötken  stoahn?
+Kapitän:	Aber seker doch! Aver ik seeih nix mehr! Blos noch ganz verschwommen!!
+
+Gretchen:	(winkt mit den Händen vor siene n Augen) Wi se seiht nicht mehr? Eenfach so?
+
+Kapitän:	Neeee, ik haff mit dat Gloass hier noa Delfine keeken und upmaal föhlde sich dat an, as haar ik Bloasen up de Netzhuut un sietdem kann ik nix mehr seeihn! Oh mien  Gott ik mutt doch dat Schipp stüern un de Doamen Strohbach-Strümpfelbaum mit Cocktails bezirzen. Aver seggt se maal, well bünd se eeigentlich? Ik kann dat nicht seeihn, bünd wi us beide mal över`n Weg loapen?
+      (Die Frauen reden ganz laut, als ob er taub wäre)
+Lieschen:  	Ha ja natüürlich! Ik bün Lieschen, de gaud Utseeihnde, de güstern Oabend bi jau an Dischk säten haff.
+  Mäggie:	Un ik bin Mäggie, de so moi proten kunn, güstern Oabend!
+
+Gretchen:	Und ik bün de Gretchen, de klaukste in düsse Runne!!
+
+Mäggie:	Joa kloar, viellicht van achtern! (Mäggie und Lieschen lachen übertrieben)
+
+Kapitän:	Ja, ja, is al gaud, se bruukt nicht so luud bölken, miene Ohren bünd in Ordnung! Aver wenn ik jau so höör, weet ik fuut, well se bünd, de Doamen hebbt bi mi en blievenen Indruck achterloaten! Aver wat dau ik denn nu mit miene Ogen??? De Schippdoktor haff Verspätung, de is eerst ab Barcelona an Bord. Ik dreih dörr! Wat dau ik blos ?
+Lieschen:  	Nu moakt se sück mal nicht direkt in ehr Kapitäns-Büx! Us schöll  all wat infallen! (Sie stellen ihn an den Stehtisch)
+Mäggie: 	Up Stee, nu riet se se sück mal tohoope, ik haff al en Idee! Gretchen, Lieschen weet ji noch as Willi ümmer düsse Höhnerogen an de Tehn harr? Weet ji noch, watt dar am besten hulpen haff?
+
+Gretchen:	Jo, du hest den Willi ümmer in`n Keller settet un hest sien Faut in Kamillentee baadt. Dorbi müss  he denn futt noch de Tuffels up Grötte sorteeren.
+	(Die Damen lachen hämisch)  
+
+Mäggie:  	So süch dat ut! Un wat bi mien  Willi siene Höhnerogen helpt, helpt ok bi Kapitän Struvenhus siene Ogen. Haff eeine van jau taufällig Kamillentee dorbi?
+
+Lieschen:  	Ik! Ohne Kamillentee goah ik nich up Urlaub, de Hinnerk steiht ünner 8 Brötckes  nich vun dat Fröhstück up, un dann haff he ümmer Buukpien (Lieschen macht schmerzen im Bauchbereich nach). Dor helpt blos Kamillentee. (Lieschen erhebt dabei den Zeigefinger)
+Kapitän:	Miene Doamen, bünd se sück dor seker? Miene Ogen brannt un juckt, ik glööv nich dat Kamillentee……
+
+
+
+Gretchen:	Un doar süch man moal, dat se villicht so eein Böötken  lenken könt, aver vun Medizin nix verstoaht. Mitkoamen!
+	(Die Doamen ziehen den Kapitän in Lieschens Kabine)
+
+Kapitän:	Aver ick mutt doch torügge up de Kommandobrügge…??!
+
+Mäggie:	Ach wat, se seeiht  doch eh nix!
+
+(Bühne ist kurz leer, dann kommen die Männer rein, vollgefuttert reiben sie sich den Bauch)
+                                     7. Szene
+Toni, Willi, Hinnerk
+Toni:	15 Meter Fröhstücksbuffet van A as Appel bis Z as Zimtrullen.
+
+Hinnerk: 	Dorbi haff wi de Appel utlaaten un bünt eerst bi W as Worst so richtig instegen. 
+(Alle drei Männer nicken zustimmend und zeigen mit Mimik das es Ihnen geschmeckt hat)
+
+Willi:  	Ik segg blos  E as Eier! (begeistert) In allen Variationen, also ik wüss ja goar nich, op wo veel verscheeden Oarten Eier tobereitet werden könt! Spiegelei, Rührei, Omelette, koakt Ei, hart, weeik, middelweeik, also ik glööv noah mien  12 Eiern kann ik eerst wer Tohuus so richtig op Pott!
+Hinnerk:	Ik haff 8 Brötckes un 5 Eier eeten, sapalot spannt mi de Plautze! (Hinnerk streichelt sich mit beiden Händen über den Bauch) Ik hoff Lieschen haff mien  Kamillentee inpackt!
+
+Toni:  	Un düsse Käserad! Habbt ji dat seeihn? So groot as´n Traktorreifen! Willi, mörgen passt du aver een bietgen beter op! Nich weer de Plastikdekoration op´n Teller leggen!
+Willi:  	Ja, ja aver dat kann ja ok moal passeeren. De Trauben habbt so verdammt echt utseeihn, dat haff ik nich maarkt, dat se ut Plastik bünd.
+
+Hinnerk:	Tominst hest du dat dörtrocken un alle up eeten.
+
+Willi:  	Dat kenn ik so! Wat miene Mäggie op´n Teller leggt, mutt ik allens eeten, dor proot ik leever nich kägen an…..
+
+(Türe geht auf, Mäggie kommt raus)
+
+
+
+
+
+8. Szene
+Mäggie, Willi, Hinnerk, Toni
+
+Mäggie:   Ah,hebbt ji endlich moal jau utgiebieget Fröhstück afschlooten? Ik mutt blos  kött de Wund- un Heilsalve hoalen, de Kapitän Struvenhus süch nix mehr. Wi hebbt all ne Ogenspölung mit Kamillentee moakt…..
+      (geht in ihre Kabine)
+Toni:   	Haff ik dat nu richtig verstoahn? De hebbt den Kapitän , in diene Kabine Hinnerk, de Ogen spöhlt, weil de nix mehr süch?
+Hinnerk:   	Mit mien  Kamillentee oder wat? Den bruuk ick aver doch för miene Plautze de is doch nich för siene  Glotzer! (Mäggie kommt wieder heraus mit Creme in der Hand)
+Willi:	Mäggie, wachte mal, wat haff de Kapitän an siene Ogen?
+
+Mäggie:  	De haff dor dör so´n Gloas keeken un nu süch he nix mehr! Wat mutt dat ok för een Gloas ween ham… dat een meist blind moakt… also een Unding, so wat eeinfach rümliggen to loaten! (geht ab)
+
+(Die Männer sind erst still, schauen sich bestürzt an)
+
+Toni:	Glotzi3000!
+
+Hinnerk:	Segg blos , wi hebbt dat liggen loaten? Au joa kiek dor boaben ligg et!
+
+Willi:	Ja, wat mutt düsse Idiot denn uk dor dör kieken? Dat is joa ook egentlich blos för Profis!
+Toni:		Aua, aua, aua dat is nicht gaud, dat haff üm seker Bloasen up de Netzhuut brutzelt!
+
+Hinnerk:   	Ja un wat moakt wi nu? Toni kiek moal bi Dr. Google, wat man dor kägen daun kann. (Toni zieht das Handy raus)
+Willi:	(lacht) Sünnenbrand op de Glotzerchen! So is`t, wenn een sien Zinken överall riensteken mutt! Dann is he nu wall de eerste blinde Passagier an Boord!
+
+Toni:   	Wachte, doar haff ik, glööv ik al wat funnen. (Liest vor) De Netzhuut van de Ogen kann bi intensive Sünneninstrahlung Schoaden nähmen. De Horn- un de Binnehuut is verbrannt un bruukt Doage bis Weeken för Regeneration. De Patient schull de Ogen vör Lucht schulen un kiene anstrengende Aktivitäten ünnernähmen. Denn schull sück dat Oogenlucht weer vullstännig instellen.
+
+Hinnerk:   (Frauen  +  Kapitän  kommen  dazu,  er  trägt  Sonnenbrille  ist  blind) Mien  leve Schollie, doar hebbt wi nu aver ne heel grote Schiete baut, op See mit´n blinden Kapitän,…. un wi bünd schuld. Wenn dat use Fraun rutfinnen, goat Vandoage noch dree Mann över Bord!
+
+
+9. Szene
+Toni, Hinnerk, Willi, Gretchen, Kapitän, Lieschen, Mäggie
+
+Gretchen:	(schleicht sich unbemerkt an Toni und tippt ihm auf die Schulter, er erschrickt)
+     Haff ik mi doch futt doacht, dat ji doar wat mit to daun hebbt!
+     
+(Lieschen&amp;Mäggie setzen den Kapitän an die Bar und kümmern sich um ihn, die Männer weichen rückwärts Richtung Stehtisch aus, es ist ihnen sichtbar unangenehm)
+Toni:  	Gretchen! Du büst ja al doar! Ach du dat also äh…eeigentlich köönt wi doar gornix för!
+
+Gretchen:	Ja seker, dat was dat eerste Moal, dat ji dree mit eeine anrullene Katastrophe nix to daun hebbt, Aver eein Moment, dor koamt wi futt tau, nich vun de Stee bewägen, haff wi us verstoahn?
+	 (gesellt sich zu den anderen) (Die drei Männer nicken schüchtern)
+Lieschen:  	So, Herr Kapitän Struvenhus, nu blievt se schöön hier sitten, wi kümmert us üm jau. Aver tauerst mööt wi hier, glööv ik, mal kött dree Gefangene in dat Krüüzfüer nämen.
+
+Kapitän:	Aver ik bitt se, ik seh doch noch ümmer nix un ik mutt doch noa de Kommandobrügge….
+
+Mäggie:  (Sie  klemmt  ihm  je  ein  Teebeutel  aufs  Auge  hinter  die  Brille) Joa, joa allens in Ordnung. Blievt se ruhig hier sitten, wi bünd futt weer för jau doar, de Ogen bünd versörgt un denn is denn uk fuut allens wedder in Botter.
+
+Gretchen:	So un nu tau jau! Wat is passeert? Spuckt´s lever futt ut, wi bünd hier op Seei, doar kannst du al moal licht över Board goahn!
+(Die Männer drucksen rum, sagen aber nix)
+
+Lieschen:  	Hinnerk! Du bruukst die nu goar kiene Utrede infallen loaten, ik seeih di doch al an, dat diene 5 Gehirnzelln an rooken bünd, wo du ut de Nummer weer rutkummmst.
+(Stille)
+
+Mäggie:  	Willi! Wenn du nich futt diene Futterluke opmoakst un mi seggst, wat ji anstellt hebbt, sett ik die as bi Robinson Crusoe op en eensoame Insel ut un dat ohne Freeidag!
+Willi:	Aver Vondoage is doch Moandag…
+
+Mäggie:	Willi!
+
+Willi:	Is ja all gaud, ik geev allens tau, bevör ik weer twee Weken Huusarrest kriegen dau. Wi hebbt een Fernkiieker bastelt. Glotzi 3000 mit de kannst du bis noa Korsika röverkieken, so scharp is dat. Aver dat dürt man nich ohne tausätzlich Sünnenschutz bruken und dat hebbt wi nu moal liggen loaten un….
+Toni:  	…Un de Struvenhüsken meent, he mutt doar dörkieken un haff sück de Ogen verbrannt. Dat haff ja tauletzt kien eene to üm seggt! Wi wüssen, wo man dormit ümgeiht … Heei nich!
+
+Hinnerk:  	Eben! Wi bünd also völlig schuldlos! Wull ik blos  moal seggen! Eene mutt halt weten, wat een kann un wat een nich kann, un eene mutt ok siene Grenzen kennen. Is halt nich jeder so technisch verseert as wi.
+
+Lieschen: 	Hinnerk ik glööv, du spinnst nu kummplett or wat? Ji loatet hier dat Dingens eeinfach soo rümliggen, so dat doar jeder ankann. Un nu habbt wi eein Kapitän, de nich mehr kieken kann.
+Gretchen:	Also ji liedt ja woll ünner vullstännige Sümstöverschätzung oder? Kiekt jau moal den armen Kapitän Struvenhus an! Un nu? De kann Schoadensersatz vun jau fordern. 
+		(Männer werden immer kleiner)
+
+Mäggie:	Willi, ik bün so suur, ik segge di eeins, Vanoabend schlöppst du op´n Balkon!
+
+Willi:	Aver Mäggie, wi hebbt dochgoar kien Balkon! Dor kummt doch futt dat Woater unner use Fenster, doar goah ik joa över Board!
+Mäggie:	Joa, heller genau!
+
+Toni:   	Gretchen, nu komm, nu wees nich so grell up us, dat habbt wi doch echt nich mit Offsicht moakt. Is ja ok allens nich so schlimm.
+
+Hinnerk:  	So süch dat ut, weil wi us doar vörher natüürlich gaaanz genau över infomeert habt! Wi bünd ja nich dumm, also ji ünnerschätzt us, glööv ik, eein wenig. Wenn de seltene Fall vun en Netzhuutverbrannung intritt, denn ahhhh, denn…. 
+
+Willi:	Denn mutt de Patient vör Licht schützt werrn un dürt kiene anstrengende Aktivitäten dörführn.
+Toni:  	Un denn schull dat Ogenlicht binnen en poar Daage weerkoamen. Also seeiht se… allens half so leeip, in en poar Doage is de Kapitän weer as neei!
+
+Kapitän:
+		Miene Herren, ok wenn miene Ogen opstunns nicht funksioneert, kunn ik jau Gesprääk doch hören, dor (wird lauter) miene Ohren Gott seis gedankt noch kummplett in Ordnung bünd! (Steht auf, die Frauen führen ihn nach vorne) Ik fass moal tohoope.
+All as wi noch in Hoaven vun Savona loagen, müss ik dortüschken goahn, weil de Doamen bi dat Inschippen al so vööl Chaos un Unruh anrichtet habbt, dat ik dat Boarding vörtrecken müss. (Männer gestikulieren zu den Frauen – seeiht  ihr, ihr seid schuld, Kapitän wird immer lauter) Denn wörr ik güstern bi dat Kapitänsdinner ok van de Doamen in Beschlach noahmen. As denn eeine annere Doame vun Deck 5 sück bi mi an´n Dischk setten wull, wörde ehr mit een Gavel in de Hand stoaken!
+Mäggie:	Ja, harr se ok verdeeint, dat was nämlich de blöde Kauh vun den Pool!
+
+Kapitän:	Un denn! Un denn woaget ji dat ok noch mi mit düt komische Deel hier…
+
+Toni:	…Glotzi3000!
+
+Kapitän:	(lauter und wütend) Dat is mi schietegoal, wo dat Dingens hier heet, dat haff mi miene Ogen verbrannt!!! Se alle hier bünd de schlimmsten Passagiere, de ik je an Board harr!
+
+Lieschen:	Dat düürt se so aver nu ok nich seggen!
+
+Hinnerk: 	Und dat is doch ok blos  half so leeip! Dat geiht doch weer vörbi! Se mööt blos  noch en biettken wachten!
+Kapitän:	Ik haff kien Tiet, to wachten! Ik mutt in eene Stünne in´n Haven vun Marseille inloapen … un well schull dat Schipp stüern, wenn ik dat nich kann?!!
+
+Willi:	Ik! Ik kann dat!
+
+Die Frauen: Du?
+
+Willi:	Jawoll, ik haff doch letztens eein Kurs bi de VHS moakt..
+
+Kapitän:
+	De VHS büdt Kurse an, woar Krüüzfohrtschippe stüert warrt?
+
+Willi:	Äääähm, joa so ähnlich!
+
+Mäggie: 	(zu den anderen) Oh nee, ik weet heel genau, wat för en Kurs de meent: ,,Mien  feernstüert Boot un ik“.
+
+Toni:   	Un de Hinnerk uni k bünd joa eegentlich al halfe Intschenööre, so dat us dat in´t Blaut  liggt!
+
+Hinnerk:  	Also düt Schipp hier inparken in Marseille – also dat is definitiv eein vun use lichteste Övungen!
+Lieschen:  	Hinnerk, nu överdriev nich so, kiek di mal use Opel Tohuus an, woveel Dellen de al haff, un dat is eein, tweei Nummern lüttker as dat Böötken  hier.
+Hinnerk:	Ach waaaatt… (winkt ab)
+
+Mäggie:	Un eerst use Schuvkarre Willi!
+
+Gretchen:	Toni! Siet wannehr büst du denn eein Intschenöör? Du weetst doch nich moal, wo man dat schrieven deit!
+Toni:   	Ik mutt dat ja ok nich upschrieven, woar man dütt Schipp stüert, man ik mutt dat moaken! Also nu loat mal de Profis moaken!
+Kapitän:	Se wullt mi also allen Eernstens seggen, dat se sück in de Loage föhlt, mien  Schipp in den Haven vun Marseille intaustüern?
+Alle drei:	Kloar!
+
+Kapitän:	Oh, mien  Gott, ik haff de Geschäftsführerinnen van dat Reisebüro Ahoi-Reisen an Board, de allens pienlichst genau ünnersöken daut, of dat hier op de MS Rosta allens as´an Schnürken klappt, een Blamage dürr ik mi hier afsluut nicht leisten!! Un nu wulln de dreei ganz unerfahrenen, sümst överschätzenden Clowns mien Schipp stüern? Dat harr ik mi in miene schlimmsten Drööme nicht utdenken künnt.
+(es kommt der Einspieler „Seemann, lass das träumen“ und alle außer Kapitän schunkeln mit)
+
+Vorhang – Ende 2. Akt!
+
+
+
+3. Akt
+
+1. Szene
+Gretchen, Lieschen, Mäggie
+Toni: 	So, denn loat mi mial kieken… Knöppe, Knöppe, Knöpppe… Schalters… Knöppe…. allens kloar…ik weet Bescheeid.
+(Gretchen, Lieschen, Mäggie kommen auf die Bühne, stellen sich an die Reling und beobachten quasi wi die Männer einparken. Sie unterstützen die Szene mit Gestik und Mimik)
+Hinnerk:  	Ach un kiek moal ne Rückfahrtkamera gifft dat ook, sogoar mit 360 grad Rundümsicht, wenn wi Glück hebbt, gifft sogoar ne Inpoarkhülpe
+Willi:	Oh wat is dat dann för ein Knöppken, de is joa extra grot…  (es ertönt ein Alarmsignal) Hoppla, Deit mi leeid! Ah ik seei all de Stee woar wir inpoarken möt, well moakt dat van uns?
+
+Toni:	Hinnerk, dat moak ik, holl du moal mien  Beeier…
+
+Hinnerk:	Au Toni, Toni moak sachte… sachte…. Uhhh dat wörd knapp.
+
+Willi:	Backstürr…. Du möst backstürr föhrn! Nu scharp inschloan, Backstüeeeeeerrr!
+Hinnerk:	Dat heet Backboard un nich backstürr…!
+
+Toni:	Loat ji mi doch tofreeden mit jau Stürr un Backboard rechts un links…. 
+
+Willi:	Wachte ik schalt dat Navi in. (Es ertönt das Gepiepe einer Einparkhilfe vom Navi, wird immer aggressiver… langer Piepton, dann ein schrammendes Geräusch.)
+
+Toni:	So! Noch eeine watt to seegen? Eeinwandfreei segg ik jau! Lüttke Delle… man `n bittken schwund is öwerall …
+
+
+Hinnerk:	Genau wi bünt hier ja ook nich up Titanic…n lütten Kratzer… dat poleert wi noasen rut.
+
+Willi:	De Kapitän sücht dat joa sowiso nich (lacht).
+
+Kapitän:	Meine sehr verehrten Passagiere, soeben sind wir in den Hafen von Marseille eingelaufen, sie können nun von Bord gehen und unsere Landausflüge genießen. Das Schiff wird pünktlich um 16.00 Uhr wieder ablegen, ich wünsche einen schönen Tag!  
+
+(Toni, Hinnerk und Willi Freeze! -	Licht wird gedimmt - Die Frauen gehen von der Bühne, sie wollen ja an Land. Es ertönt Möwengeschrei und Williösische Musik. Williösische Bistromusik, Stimmengewirr etc. soll die Zeit überbrücken vom Landausflug – ggf. n bisschen Lichtshow oder n Seitensketsch – Licht geht wieder hoch, wenn komplett an, exakt gemeinsam aus dem Freeze)
+
+Toni:	Also, dann parkt wi düssen Karren nu moal weer ut, nu weet wi joa woar dat geiht.
+
+Hinnerk:	Awer Toni dat is nettegroad teihn vör veer, de Kapitän haff doch veere seggt, schöllt wi nich noch n bittken wachten?
+
+Willi:	Üm 4 moakt de Poolboar oapen und ik will de erste ween de op´n Boarhocker sitt … Toni giff Gas!
+Toni:  	Taun Dienste, geiht löss. (Man hört Maschinengeräusche lauter werden, Horn tutet etc.) Also doar kiekt aan, eenwandfreei, ohne Parkrempler“ Nu hebbt wi freeie Fohrt noar Barceloooooooooooa…
+
+(Männer Freeze – Blackout – Vorhang zu, schneller Abbau, - Vorhang auf - Frauen kommen wieder auf die Bühne)
+
+2. Szene
+ Mäggie, Gretchen, Lieschen
+
+Lieschen:  	Also nu bünn ik awer sowat van stolz up mien  Hinnerk. Hebbt seei doch woarhaftig dat Boot in- un weer utpoarkt.
+
+Gretchen:	Joa, well haff dat wall docht, doar hebbt wi use Kerls moal echt ünnerschätzt… un dat mit den lüttken Kratzer faallt ook goar nich up
+Mäggie:  	Ja, ok wenn bi mien  Willi boben nich de hellste Kerze brannt…vandoage haff he mi würklich överrascht.
+
+(Britta und Gitta betreten die Bühne, in Williösischem Schick Sonnenhüte, Brillen, Einkaufstaschen)
+
+
+
+3. Szene
+Britta, Gitta, Lieschen, Mäggie
+
+Britta:	Joa wie, is denn de Boar hier noch ümmer dicht? Man de Kapitän Struvenhus…
+
+Gitta:	…wull doch för us sien Kapitäns-Cocktail 
+
+Britta:	…serveeren un nu is goar kiene doar?
+
+Lieschen:	Wiso kreeg de nu nen Kapitäns Cocktail un wi nich?
+Mäggie:	Woarschienlich hebbt de dat extra dortaubestellt!
+
+Britta:	Un? Hebbt seei düsse Krüzfoart hier ook öwert Reisebüro bucht?
+
+Mäggie:  	Ne, wi stoaht in Maseille so ant Hoafen wachtet so up´n Bus…. Un denn so upmoal is düt Schipp hier koamen un wi bünt fix so insteegen.
+
+Gitta:		Ach wat moie! Bünt see denn bis nu…
+
+Britta:		…tofreden mit dat wat up düt Boot anboan wörd?
+
+Gitta:		…hebbt see irgendwecke Beanstannugen?
+
+Britta:		… woar gefallt jau den Service?...
+
+Gitta:		…Un  wat hollt se van de Pools, is dat Woater tau kolt? …
+
+Britta:		… oder tau woarm  … as so´n Fleeischkbrühe de man inne Sünne stellt haff? 
+
+Gitta:		Un woar süch dat bi dat Eeten ut?....  
+ 
+Britta:		Allet van´t Feinsten oder gifft dat….
+
+Gitta:		Örgend watt to verbetern? Wi bünt heel…
+
+Britta:		…Ohr!
+
+Mäggie:	Nee wi hebbt….
+
+Lieschen:	…nix to….
+
+Mäggie:	…beanstanden. Un? Hanni un Nanni, wat drieft jau beide up düt moie Bööötcken?
+
+Britta:		Geschäftliche Angelegenheiten! Britta un….
+
+Gitta:		…Gitta Strohbach-Strümpfelbaum. (schütteln die Hände)
+
+Britta:	Wi habbt vandoage vullet Programm segg ik jau, schlendern un bummeln dör de….
+Gitta:		…Gassen van Marseille – is al doan! Nu hebbt wi noch den…
+
+Britta:		…Kapitäns-Cocktail bucht und dornoa eene Stünne…
+
+Gitta:		….Yoga mit dat Fitness-Team van düt Schipp und van….
+
+Britta:	…oabend steiht denn noch de groooote Travestie-Musical-Show op Programm! Direkt van hier boaben Oapen-Air up Sünnendeck …vör alle Lüüe (schaut ins Publikumm) ok up ünnere Pooldeck.
+
+Gitta:	…un weil wi tau de wenigen hört de vun´t Sünnendeck taukieken dürt hebbt wi us extra… 
+
+Britta:		…vörhen in Marseille de dortau passende Oabengardrobe köfft!
+
+Gitta:	Also kumm Britta, loat uns kött use Taschken up de Kabine brengen, dann koamt wi in ne halve Stünne weer, viellicht is de Kapitän dann ja doar un kredenzt us usen Kapitäns-Cocktail.
+
+Britta:		Also miene  Doamen,  wi wünschket jau… 
+
+Gitta:		…een moien Noamiddach, un viellicht sücht man sich joa…. 
+
+Britta:		…löter noch bi´t Animationspogramm….
+
+Britta+Gitta:	Tschüssssssssssssssiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+
+Alle drei:	Tschüssssssssssssssiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+
+Mäggie:	Wat bünt dat dan för Transusen? Doar kann de Kapitän awer man bliede wän,           dat wie bie dat Oabendeeten ümmer bi üm sitten!  
+
+Lieschen:	Awer dat kannste lut seggen! 
+
+(Frauen begeben sich zur Bar, Männer kommen mit stolz geschwellter Brust herein)
+
+
+
+
+4. Szene
+Gretchen, Lieschen, Mäggie, Toni, Willi, Hinnerk
+
+(Toni mit Blume in der Hand kommt im Schlepptau mit Gretchen herein)
+
+Gretchen:	Tonilchen! Mien  lütten Kapitän, also dat hest du joa sowat van souverän meestert…. Dat haut mi joa ümmer noch heel ute Söcken. (fällt ihm um den Hals)
+
+Toni:	Tja leehrt is ehm leehrt.
+
+Hinnerk:	Was allet goar kien Problem! Man mutt sück doar einfach n´bietken rienfuchsen! 
+
+Willi:		Dat kann natürlich nich jeder! Doar mutt man all wat up´n Kasten hammen!
+
+(Kapitän stolpert mit Sonnenbrille und Stock herein)
+
+
+5. Szene
+      Toni, Gretchen, Hinnerk, Willi, Lieschen, Mäggie, Schifferlein 
+
+Kapitän:	Hallo? Hallo? Toni, Willi, Hinnerk? Bünt ji doar?
+
+Lieschen:	Awer Herr Kapitän Struvenhus! Seei schöllt doch liggen blieven un sick schonen!  Seei schöllt hier doch nicht as n Blinde Kauh rümloapen… dat is joa kauhgefährlich, ähm, saugefährlich! 
+
+Kapitän:	Ja woar schöll ik dann….? Woar schöll ik tau Ruhe koamen? Wi bünt tein Minuten to frauh ut`n Hoafen utlöppt…. Dat is ´n Katatstrophe… 
+
+Mäggie: 	Mien  Tied, seei bünt ja awer ok mit goar nix tofreeden oder? Nu hebbt use Kerls dat so gaud moakt mit dat utparken van düt Böötken  un koamt sogoar noch vör de Tied in Barcelona an! Also woar is dat Problem? 
+
+Kapitän:	(wütend, steigernd) Woar dat Problem dorbi is…. Woar dat Problem dorbi is? De heele Animations-Crew is noch in Marseille! Seei döisge Döspaddel hebbt n groden Deel van miene Crew vergeeten! Ik bün gelinde seggt…. Am Arsch! 
+
+Toni:		… Oh Ha! Dat is nu ja man doof wa?
+
+Hinnerk:	Joaaa das is ja man wat… awer künn joa ok leeper! … to´n beispiel wenn wi denn Koch vergeten haarn! 
+
+Kapitän:	Ik glöv seei verstoaht den ernst de Loage nich in de ik mi befinnen dau! An Bord bünt de Inhaberinnen van dat Reisebüro Ahoi-Reisen, dat haff ik jau ja all verkloort! 
+
+Gretchen:		Ah! Seei meent düsse Transusen! Hebbt wi ook all kennenleert.
+		
+Kapitän:	Düt Schipp wörd van de beiden Süstern genau ünner Lupe noamen. Wenn ik un de heeile Crew up düsse Reise nich eein Top-Service ofleefert, kummt düt Schipp noit nich in den Katalog van Ahoi-Reisen. Un dat allerwichtigste för de beiden Fraulü is use Unnerhollungsprogramm an Board.
+
+Lieschen:  	Stimmt! De warn nettegroad doar un hebbt dorvan schwärmt, dat se futt in ne halve Stünne eein Kapiätns-Cocktail kriegt und dornoar een Yoga-Stunde bucht hebbt…. Un vanoavendd freeit se sück al heller up de Musical-Travestie-Show 
+
+Kapitän:	Na wunnerboar, ik schöll blind n Cocktail shaken un und miene Show un Sport-Crew steiht in Marseille…. Ik bün ant Enne, dat was et… ik goa över bord!
+
+Willi:	Ach wat, se möt ja nich futt denn Düvel an de Wand moalen. Dat gifft nix wat de Willi nich weer henkrich! Oder Mäggie? 
+
+Mäggie: 	Oha, also mi wörd doar futt so eeniget infallen… awer dann stoah wi mörgen noch hier.
+
+Hinnerk:	Moment moal, wat meenst n doar mit Willi?
+
+Toni:   	ähhh… dat wür mi nu awer ook heller interesseeren… meesttied wenn de Willi Ideen haff möt wi dat an enne utboaden. 
+
+Mäggie: 	Herrgott nomoal, kann nich eenmoal wat normoal aflooapen? Eenfach moal n heel eenfachen stinklangwieligen Urlaub? 
+		
+Willi:	Ach Quatsch, langwielig kann doch jeder. Also de erste Maat Willi övernemmt nu dat Ruder! Ji Fraulüüüe schmeert nu den Kapitän mit de Creme siene Oogen in. Dann treck ji jau´n Sport-Tüch an…. Un seeei Hr. Kapitän geeft mi moal  kört eehre Kapitänsjoppe!
+
+Kapitän:	Noit in Leeven, geev ik jau miene Jacke!
+
+Willi:		Gaud, dann bün ik moal gespannt woar ji futt den Cocktail tausoamenwürfeln                                                                                           .                          willt.
+(Wiederwillig zieht Kapitän die Jacke aus und gibt sie ihm, die Frauen sind ggf. behilflich) Kiek… geiht doch, un passen deit deei ook hunnert…. Steiht mi ook noch voel beeter! 
+
+Gretchen:		Ja un dann? Schöllt wi de Sportstünne övernehmen oder wat?
+
+Willi:	Richtig Sherlock Homes! Ji dreeie bünt doch fleeten joar all moal bi´n Schnupperkurs för Yoga in´t Leeier Sportshuus ween. Dat mutt nu langen.
+
+Lieschen:	Dat meenst du nich würklich ernst?
+
+Willi:	Seih ik so ut as wenn ik Spass moak? … un Mäggie… bevör du nu Luft hoalen wusst… Abmarsch!
+
+(Die Frauen geleiten den Kapitän hinaus und gehen dann kommentarlos in ihre Kabinen)
+
+(Willi begibt sich im folgenden langsam hinter die Bar, nimmt Tequilla, Zitrone und Salz und schenkt 3x Gläser ein)
+
+Hinnerk:	Willi, denk nich moal dran!
+
+Toni:   	Up goar kien Fall Willi wi bünt sieht 25 Joar gaude Fründe un wenn dat nu noch n poar joare wieder goan schöll….  
+
+Willi:	…dann geihst du mit Hinnerk all moal runner in de Garderobe van de Show und kiekst die de moisten Kleeder för use Musical-Show ut…. Ik will in de Tüschkentied den Kapitän vertretn und mi bi de Coacktails versöken… Un Kerlse ik will nu kien Mimimi… de Loage is ernst… wi hebbt wall Mest baut und dat möt wi nu weer utbögeln… or meent ji wat anneres?   PROST
+
+(stößt an, alle trinken; schenkt nochmal ein)
+
+Hinnerk:	Willi ik kunn di n Hals ümmedreihen uns tau sowat tau verplichten 
+
+Willi:		PROST
+
+(stößt an, alle trinken; schenkt nochmal ein)
+
+Toni:   	Wenn dor je wat noa buten kummt, Willi ik segg di…  
+
+Willi:		PROST, PROST!
+
+(stößt an, alle trinken; will nochmal einschenken – Hinnerk und Toni winken dann aber doch ab und gehen, Willi darf sich noch einen alleine genehmigen 😊)
+
+
+
+Willi:	So Willi, nu hangt dat blos noch van di of! Barkeeper! (er spuckt in die Hände) Will wi doch moal seein! Ik haff doar vör Joarn joa almoal so´n VHS-Kurs moakt… 
+
+(Britta und Gitta treten in Sportkleidung auf, Willi hat die Jacke vom Kapitän über die kurze Hose gezogen)
+
+
+6. Szene
+Willi, Britta, Gitta
+
+Britta:	So, dann will wi doch maol kieken.
+Gitta:	Uhhh, of de Kapitän nu wall dor is un wi nu endlich usen Cocktail krieget.
+
+Britta:	Bevör de Yoga-Stünn anfangt.
+
+Willi:	Aber selbstverständlich miene Doamen! Willi! Erste Maat und internatschonal anerkannten Fachmann för den Bereich Cocktail-Schütteln. Nehmt seei doch bidde Platz! (er geht hinter die Theke die Frauen nehmen an der Bar Platz) Deei Kapitän höchstpersönlich haff mich seegt, ehr tau  Diensten tau wän, weil ik jo quasi eeine Legende bün biie dat Thema Getränkeversörgung! Ik hab jo sogor eein eigenen Cocktail erfunnen, de wörde extra na mi benannt. De &quot;Flotte Willi&quot; haff übrigens nett sien Dörchbruch in New York hatt, dor hett de eeinfach de „Flotte Willi“
+
+Gitta:	Ja gaud, wenn dat so is un de Kapitän extra för us
+
+Britta:	sien besten Mann parotstellt, dann föhlt wir us mal geehrt! Wat is denn drin in düssen Flotten Willi?
+Willi:	Ach, n` bitken wat van düt n`bitken wat van dat un n`Spritzerken   Zitronensaft! (er stellt zwei Cocktailgläser auf die Theke und öffnet einen Shaker, dann beginnt er zu improvisieren) Also as Basis verwendet wi 32,5 cl Weizenbeer, dann 3,5 cl Kassensaft, 4,78 cl Bananensaft, dann wörd dat so richtig moi geschmeidig!
+Gitta:	Ach dat giff jo ne wilde Mischung, mööt seei
+
+Britta:	dor denn nix offmeten? Normol haff man dor jo so`n  Metbecherchen oder?
+
+Willi:	Ne, blots de Amateure brukt dat! Ik hav hier das vollendete Oge! Man nu  nich dörnannerbrengen, widder in Text! Ne Prise Zimt, ne Prise Chilli, eein Schlückchen Tequila un natürlich nich tau vergeten bi Tequila, mutt unbedingt Solt un ne Zitrone rin.
+Gitta:	Ne Heele?
+
+Willi:	Natürlich ne Heele! Aber up den Wurm möt wi verzichten, deei is net bien Angelutfluch. So un denn noch 70 cl Stroh-Rum 80% Deckel drup und ördentlich schütteln, schütteln, schütteln uuuuund fattig! (schenkt ein - giftgrüne Farbe! Zweiten vorbereiten, Shaker verwenden oder Cocktailgläser bereits vorbereiten)
+Britta:	Dat is aver ne interessante Farve!
+
+Gitta:	Drink ji uk  eein mit!
+
+Willi:	Utgeschloten – ik bün in Dienst! Salute! (Die Frauen trinken, husten)
+
+Willi:	Und? De haff Füür or wa?
+Britta:	Also ik mutt seggen so eein Cocktail haff ich würklich noch noit nich drunken, deei Chilli un deei Strohrum
+Gitta:	deei brannt di den Rachen runner as eein Füürwark an Silvester und denn
+
+Britta:	kummp dat Beer un dei Bananensaft! Dei löschet di fort den Brand un allens wörd heel flauschig in Mund. Bis denn
+Gitta:	dei Zimt in Offgang eein prickeln as  Miechamelfeute up deei Tunge achterlett un  heel taun Schluss
+
+Britta:	kummp deei Zitrone un neutralisiert allens weer! Ich nehm noch eein!
+Gitta:	ik  ook!
+
+Willi:	Leider, leider deei Doamen mutt ik tau dat nächste Event, hier an Bord befinnt sück een Milliadär, deei haff mi bucht för ne private Cocktailstunde. Aver! (er kommt hinter der Bar vor und klotpft an die Tür, wo ihre Frauen drin sind) ji hebbt  ja  nu eeine Yoga-Stunde bucht! Tau, rutkaomen, iji bünt dran!
+
+7. Szene
+Gitta, Britta, Gretchen, Lieschen, Mäggie
+ (Frauen kommen in Sportkleidung raus, Haare hochgeknotet, Stirnband etc., haben Flasche Wein und 5 Gläser dabei, stellen diese hin, Mäggie gießt ein)
+
+Mäggie:  Willi ik kann noch nich garanteern, of du den Obend vandaoge noch överleevst oder of du Haifischfauer wördst.
+Willi:	Ach wat, ji seeiht  doch wunnerbor ut, dat maok ji spitze, man ik mutt nu heel  gau widder tau mien  Milliardär und achternoah in die Ümkleide. (geht ab)
+Britta:	Ach ji bünt gor kiene Gäste hier sondern
+
+Gitta:	eein Deel van dat Animationsteam?
+
+Gretchen:	Joh, so in etwa, wi bünt, wir bünt professionelle ähm…
+Lieschen:  …Yoga-Lehrerinnen! Un deswegen bekummpt nu erstmaol jede van us eein Glas Wien! Wi praktiziert nämlich dei hoge Kunst van dat Vino – Yoga.
+
+Britta:	Vino–Yoga?
+Mäggie: Jawohl, anners erdreggt man dat joa nich. (evtl. Yoga-Musik) Also nu nich lang rumlamentieern, jeder nümmt sien Glas Wien in deei Hand un denn fang wi an mit deei erste Figur … Deei Boom! 
+(alle drei gehen in Position, führen vor, Regieanweisung. Sind bekannte Yoga-Posen)
+
+Gretchen:	So deei Doamen un nu ji! In Position gaohen un Armse noa boben, Armse noa unnen – Schluck drinken! Immer moi wiederhaolen!
+Lieschen:  So is dat moi, eeine fließende Bewegung ut denn Ellenbogen rut bis in den Mund rin.
+( Kann beliebig wiederholt werden bis entweder das Glas leer ist oder das Gesicht voll!)
+
+Gitta:	Aha, dat  is jo total interessant! Vino-Yoga, dat kenn ik ja noch gor nich!
+
+Britta:	Ik ok nich,  man is  up jeden Fall eeine heeil interessante Kombinatschion!
+
+Mäggie:  	So un nu wiieder tau de nächste Figur – deei Krieger. (die drei gehen in Position) 
+Hier mutt man besünners up dei Körperspannung achten. Nu heeil faste dat Zäpfchen anspannen! (die drei kneifen das Gesicht zusammen)
+
+Gitta:	Das Zäpfchen
+
+Britta:	woar schöll dat denn gaohen?
+
+Gretchen:	Höchste Konzentratschion! Bloß dör johrelange Übung! Wenn ih dat köönt, denn bünn ji echte Yogis.
+Lieschen:  	So un nu in Position goahen, Wienglas strecken un över den Kopp Richtung Mund föhren und eeinen ördentlichen Schluck drinken.
+Gitta:	Mi is licht schwummerich, man deei Muskeln
+
+Britta:	dei bünt al totoal entspannt.
+
+Mäggie: 	Seeih ji, net so mutt da wän. Wiedermoaken, wiedermoaken! Jooo so ist gaud. Un  nu kummt deei Königsdisziplin! Deei Verknüpper!
+Gretchen:	Ganz genau, up eein Beein staohen, dat annnere wiet no achtern utstreeken, Armsee utnanner un denn de gestreckte Faut anwinkeln un van achtern över den Kopp bis no vörne int Gesicht brengen un dann den groten Tehn an dat rechte Nösenlock inhoaken.
+
+Gitta:	Auuu äääähm ik glöve wi möt denn so langsam
+
+Britta:	up Zimmer, ach et is jo al so laote un wir möt jo ok noch dat Obendkleeid antrekken!
+Gitta:	Hach, wi  wörden jo so gern noch wiedermaoken, dat was jo äußerst lehrreich, man nu drängt deei Tied…. bis löter! (gehen rasch ab)
+
+
+Lieschen:  (lacht) Ha! Dat was doch sensationell! As wi vermutet hebbt: bien Verknöter stieget sei ut un speelt  den sterbenden Schwaon! Dat was eine wahre Meisterleistung van us! Prost! (stoßen an)
+
+Kapitän: 	(nicht zu sehen nur zu hören) Ich kann weer seeihn! Juhuuu ich kann weer seeihn!
+Mäggie:	Oh haff ji dat höört, deei Kapitän kann weer seeihn, na Gott sei Dank!
+
+Gretchen:	Lieschen, dann haff deei Behandlung van  di jo tatsächlich Wunner wirkt!
+
+Lieschen:   	Ik segg doch, deei Hämorrhoiden-Salbe van Hinnerk, deei is gefäßverengend un wat ant Achterdeel funktionieert, mutt ok an deei Ogen klappen. Is even blos  ant annere Enne. (Kapitän kommt raus, glücklich und feuerrot um die Augen)
+
+8. Szene
+Lieschen, Mäggie, Gretchen, Schifferlein
+
+Kapitän: Ik kann weer seeihn, ik bün weer herstellt. Juhuu!!!! Nu kummpt allns in Ordnung.
+
+Mäggie:  	Jo, man deei Brille schulln ji viellichte noch eeine Wiele drägen, weil anners künn man meeinen, ji hebbt den Begriff „Tomaten up deei Ogen“ wörtlich nohmen..
+
+Kapitän: 	Ach is doch egoal! Wor bünt deei Reisebüro-Süstern, ik moak mien  weltberühmten Kapitäns-Cocktail!!
+Gretchen:	All erledigt, deei erste Maat Willi haff dat doch övernaomen!
+
+Kapitän: 	Oh mien n Gott, deei Willi haff tatsächlich deei Cocktails mixt? Dat was sicherlich eeine Katastrophe! Un wat is mit deei Yoga-Stunde? De ist ja utfaalen un ik mutt stattdessen…
+
+Mäggie: 	Ach papperlapapp utfaalen, allns kollen Koffee! Haff wi allns övernomen! Bis taun Verknöter bünt wi komen, dann habbt de Doamen plötzlich Wichtigeret tau daun hatt…
+Kapitän: De Verknöter? Ik bün ruineert! De wert mi bi jedet andere Reisebüro ut dat Programm schmieten. Ik weeit nich, wat ik nu daun schöll!
+
+Lieschen: 	Aver ik! Ji holt nu ehr Mikro un dann moderiert ji as gewohnt deei Travestie-Modenschau! Weil wenn ji mal na unnen kiekt, dann seeih ji, dat dor al hunderte van Passagieren up dat Pooldeck Platz naohmen habt un heel gespannt up dat Highlight van deei Krüzfohrt wachtet.
+
+Kapitän: 	Deei Travestie-Modenschau? Aver wo schöll dei denn stattfinden? Mien  Animationsteam steiht in Marseille in Hafen.
+
+
+Gretchen:	Kerl, nu  hebbt seei doch bidde maol etwas Vertrauen in us, wenn wi wat in deei Hanne nähmt, denn könn ji sicher ween, datt dat ook klappt! Also wi drei maokt us nu gau moi und ji maokt deei Moderation as immer un laot jau  jo nix anmarken! (Die Doamen gehen ab in die Kajüten)
+
+Kapitän:	Boh, wenn ik düsse Reise heeil övertstoh, dann kann mi in düt Leven nix mehr     schocken! (Holt das Mikro, geht vor zur Reling) Miene sehr verehrten Passagiere, leevet Publikumm! Bevör wi mit unsen Ballavend samt Galadinner anfangt, dür ik jau vuller ähm (hüstelt) Stolz nu use sensationelle, sagenhafte  Travestie-Modenschau präsentieren.So wat haff et würklich noch noit nich geven. Ich bün net so gespannt as ji! Heitet sei mit mi van Hatten willkaomen… Carla Cayenne, Pippa Pepper und Lulu la Belle! Musik off!
+9. Szene
+Toni, Hinnerk, Willi
+(Show - Hinnerk kommt von hinten durch das Publikumm in Feiner Abendrobe (Marilyn Monroe Style). Es ertönt Klaviermusik, oder noch besser ein Matrose spielt Schiffersklavier das Lied… „I wanne be loved by you“ Hinnerk steigt ein und singt „I wanne be loved boy you… und geht beim singen auf die Bühne, schäkert über die Mimik mit dem Publikumm. Im zweiten Refrain kommen die anderen beiden von hinten rechts und links über das Publikumm dazu gehen ebenfalls auf die Bühne, am Ende stehen alle zusammen auf der Bühne. Falls Zugabe verlangt wird: „Space-Taxi“ die Männer schmeißen die Roben weg und darunter sind eng anliegende Leggins und (T)raumschiff Oberteile. Alternativ kann man sich auch auf eine andere Zugabe einigen. Die ganze Szene kann mit drei jungen Matrosen zu den drei Grazien verfeinert werden, erhöht den Kontrast und lässt Raum zum Spielen.
+
+10. Szene
+Britta, Gitta, Gretchen, Lieschen, Mäggie, Schifferlein
+
+Kapitän: 	Leve Gäste, ich hope jau haff use Show gefaalen, ik dür jau nu aale tau einen kostenlosen Cocktail in deei Meerjungfrau-Bar up Deck 8 inlaoden, drinket seei, geniißet seei, van mi ut ok 2 oder 3 Cocktails (leiser) Viellichte hab ji dat heele Dilemma dann morgen frau uk vergeten…
+
+(Gretchen, Lieschen, Mäggie kommen aus den Kabinen in schönen Abendkleidern, richten sich aber nebenher noch, Ohrringe rein, Kleider zu, waren in Eile.)
+
+Gretchen:	Ohhh… al vörbi?
+Lieschen:	Mist, dat har ik doch nu so gerne ok seein!
+
+Mäggie:  	Knapp verpasst, man för den Balloabend wulln wir ja schließlich heller moi ween! Und… wo was et?
+
+
+Kapitän: 	Ik befürchte, ik kann taukünftig deei Deiertransporte up de See övernehmen, denn up Passagiere bruk ik nich mehr hoapen!
+
+(Britta und Gitta treten auf in Abendrobe, bauen sich euphorisch vor jim auf, die anderen Doamen setzen sich an die Bar)
+Britta:	Herr Kapitän Struvenhus!
+
+Gitta:	Also wi möt jau seggen, et is würklich
+
+Britta:	unfassbor wat ji hier offleevert hebbt.
+Gitta:	Sowat giff et ja up kien Schipp!
+
+Britta:	Also würklich eein heller starket Stück us fehlt
+
+Gitta:	deei Worte!
+
+Kapitän: 		Also miene Doamen, il weeit nich, wat ik seggen schöll, ik, ik, ich bün wirklich sprachlos, sowat is mi noch noit nich passeert up aale miene Reisen un ik kann jau dat heel genau verkloren..
+Britta:	Dor gifft dat gor nix tau verkloren, weil
+
+Gitta:	et för us sünnenklor is, dat ji nich in unsen Katalog koamt!
+
+  Britta:	 Nein! Up gor kienen Fall! Denn ji kaomt up deei Titelsiete!     
+  Kapitän:	 Aver dat könnt ji doch nich moken. Ik bün ruiniert……... Titelsiete? 
+  Gitta:	Jo kloar! Also erstens düssen „Flotten Willi“ den us de 1.Maat serviert haff
+Britta:	 noch noit eein beteren Cocktail drunken. Un denn noch
+Gitta:	dei dreii Yogalehrerinnen hier! Unfassbor goud! Dor markt man richtig
+
+Britta:	 dat man bi Profis is! Gretchen:	Tja leehrt is even leehrt! Lieschen:	Och, johrelange Övung!
+Mäggie:	Ik glöve, ik maok dat nu hauptberuflich!
+Britta:	Un dann noch disse Travestie-Modenschau! Mit wat för eein Witz
+Gitta:	un wat för eein Charme! Also, jau Animations-Team verstaiht sien Handwark!
+
+
+
+Britta:	Herr Kapitän Struvenhus, wi sörget dorför, dat ehr Schipp för deei nächsten Johre utbuchet is!
+Gitta:	Wörden ji us dorför van Avend noch taun Ball begleiten?
+
+Kapitän: 	Aver selbstverständlich, et was mi eeine außerordentliche Ehre, bitte goaht  doch al maol vör, ich bün  foot bi jau!
+Britta:	Aber laotet sie us
+
+Gitta:	nich tau lange wachten! (gehen ab)
+
+Gretchen:	So und nu? Nu bünt ji sprachlos wat?
+
+Lieschen:	Tja in knifflige Situationen loopet wi tau Höchstform up!
+
+Mäggie:	Dat was quasi eein lüttken Spaziergang för us!
+
+Kapitän: 	Miene Doamen, ik mutt seggen, ok wenn ji un ehre Göttergatten mi erst in düsse missliche Laoge brocht habbt, letztendlich hab ik et dör ehr Engagement up deei Titelsiete van Ahoi-Reisen brocht un dat was all immer mien  Drööm! Ik will mi erkenntlich wiesen, wat kann ik jau Gaudet daun? (die Doamen tuscheln, hängen sich dann beim Kapitän ein)
+Gretchen:	Vielleicht eeine lüttge Krüzfohrt?
+
+Lieschen:	In Haarbst?
+
+Mäggie:	Irgendwor hen, wor et warm is?
+Kapitän: 	Eiine lütke Krüzfohrt in Haarbst, irgendwor hen wor dat warm is? (die Frauen nicken) Tja dor will ik mi ja mal nich lumpen laoten! Wat hol ji van Karibik in Oktober? (Die Frauen jubeln) Dat werte ik maol as eein Joa! So, dor wi us dann düt Jaohr nochmals sejit un wi us nu al gaud kennenleehrt habt, ik bün de Florian! (Die Frauen freuen sich) Dann weer ik nu maol up den Ball gaohen, grüßt ji mi bitte ehre Kerlse bzw. deei Doamen! Un nich vergeten, deei erste Danz van Aobend hört mi! (Die Frauen quatschen aufgeregt durcheinander, die Männer stolzieren in Frauenkleidern herein und bauen sich vor den Frauen auf)
+
+
+11. Szene
+Gretchen, Toni, Hinnerk, Lieschen, Willi, Mäggie
+
+Gretchen:	Ah dor kiek an, miene lütke Carla Cayenne, holla, holla! Also eein bitken sexy find ik dat ja wall, wenn du eeine Strumpbüxe anhast (lacht).
+Toni:  	Gretchen hör mi bloß up, also woar ji dat utholt mit so eein Inklemminstrument, miien bestet Stück is heel inklemmt, dor musst du naosen erstmaol kieken, of doar noch allens in Ordnung is.
+
+Gretchen:	Natürlich Tonichen.
+Lieschen:  Pippa Pepper, Hinnerk, Hinnerk! Wat  hest du nen Hüftschwung drup! Wor hast du den denn nu herhoolt!
+Hinnerk:  	Tja Lieschen, du kennst even noch nich aale Sieten van mi, ik bün immer för eeine Överraschung gaud. Kriesst naosen noch eine Privatvorführung.
+
+Willi:	Un miene seggt weer nix! Un Mäggie? Wat seggst du tau Lulu la Belle?
+Finnst mi doch heller  scharp or?
+
+Mäggie: 	Also ik har dat ja nich docht, dat ich dat maol tau di segge, aver Fränzchen vandaoge has du di sümst övertroffen! Wor du dor kort dat Ruder övernohmen has un de heele Schiffsreise rettet hast, Respekt! Un ik mutt seggen, in dat Kleidchen hest du tatsächlich eein ordentlichen Knackmors. (haut drauf)
+Willi:	(total gerührt, weint fast) Mäggie miene Duuve un dat ut dienen Mund, dat freit mi aver! Un wat is mit den Kapitän? Was he taufreh?
+
+Mäggie:	Künn man so seggen! Dank us haff de dat nich blos in den Katalog schafft van Ahoi-Reisen sondern sogor up deei Titelsieete!
+Lieschen:	 Un deswegen wull he sück erkenntlich wiesen un haff us inladt         ! Gretchen:	Genau! Wir dürt in Oktober aale mitnander nochmol up Krüzfohrt!  Toni:	 Ne!! Ik dreji dör, worhen?
+  Alle drei
+Frauen:	IN DE KARIIIIIBIK!
+Hinnerk:	Tja, wi sesse tauhope bünd eben ein gescheites Team ut Leehe, giff et Probleme, schreitet wi tau Tat!
+
+Willi:	Mit Intelligenz un Pfiffigkeit, staoh wi stets för allet bereit.
+Toni:	Dorüm schöll man us in Leehe noit unterschätzen, denn wi könnt sogor Barge versetten.
+
+Vorhang – Ende des Stücks!
+
+
+
+
+
+</textarea>
+  <div id="focusFloat" title="Fokusmodus beenden">⚙️</div>
+
+<script>
+  const $ = (id)=>document.getElementById(id);
+  const state = {
+  favs: new Set(load("v18p_favs", [])),
+ cues: [], i: 0, anchors: [], hits: [], hitIdx: -1, roleSel: [], visible: [], raf: null, playStart: null };
+
+  function save(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
+  function load(k, fallback){ try{ return JSON.parse(localStorage.getItem(k)) ?? fallback; }catch(_ ){ return fallback; } }
+  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function setScale(v){
+    const s=Math.max(0.8, Math.min(2.6, Number(v)||1));
+    document.documentElement.style.setProperty('--scale', s);
+    $('szVal').textContent=(Math.round(s*100)/100).toString().replace('.',',')+'×';
+    save('v18p_scale', s);
+    autoFitCurrent();
+  }
+  function lastBefore(arr, pos){ let out=null; for (let i=0;i<arr.length;i++){ if(arr[i].idx<=pos) out=arr[i]; else break; } return out; }
+
+  function parseAll(text){
+    text = text.replace(/\r\n?|\u000D/g, "\n");
+
+    const acts = [], scns = [];
+    const reAct1 = /(^|\n)\s*(\d+)\s*\.?\s*Akt\b/gi;
+    const reAct2 = /(^|\n)\s*Akt\s*(\d+)\b/gi;
+    const reSc1  = /(^|\n)\s*(\d+)\s*\.?\s*Szene\b/gi;
+    const reSc2  = /(^|\n)\s*Szene\s*(\d+)\b/gi;
+    let m;
+    while((m=reAct1.exec(text))!==null) acts.push({idx:m.index+(m[1]?m[1].length:0), label: m[2]+". Akt"});
+    while((m=reAct2.exec(text))!==null) acts.push({idx:m.index+(m[1]?m[1].length:0), label: m[2]+". Akt"});
+    while((m=reSc1.exec(text))!==null)  scns.push({idx:m.index+(m[1]?m[1].length:0), label: m[2]+". Szene"});
+    while((m=reSc2.exec(text))!==null)  scns.push({idx:m.index+(m[1]?m[1].length:0), label: m[2]+". Szene"});
+    acts.sort((a,b)=>a.idx-b.idx); scns.sort((a,b)=>a.idx-b.idx);
+
+    const COLON = "[:\uFF1A\uFE55\u2236]";
+    const name  = "[^\n:\uFF1A\uFE55\u2236]{1,120}?";
+    const reSpk = new RegExp("(^|\n)\s*("+name+")\s*"+COLON, "g");
+
+    const ms = []; let mm;
+    while((mm=reSpk.exec(text))!==null) ms.push({ at:mm.index+(mm[1]?mm[1].length:0), name:(mm[2]||'').trim(), start: reSpk.lastIndex });
+
+    const cues = [];
+    for(let i=0;i<ms.length;i++){ const cur = ms[i]; const end = (i+1<ms.length) ? ms[i+1].at : text.length;
+      let body = text.slice(cur.start, end);
+      body = body.replace(/^[\s\u00A0\u2007\u202F\u2060]*/g, "").replace(/[\s\u00A0\u2007\u202F\u2060]*$/g, "");
+      const act = lastBefore(acts, cur.at);
+      const scn = lastBefore(scns, cur.at);
+      cues.push({ speaker: cur.name, text: body, act: act?act.label:null, scene: scn?scn.label:null, at: cur.at });
+    }
+
+    function firstCueAfter(pos){ for(let i=0;i<ms.length;i++){ if (ms[i].at >= pos) return i; } return null; }
+    const anchors = [];
+    acts.forEach(a=> anchors.push({ label: a.label, idx: firstCueAfter(a.idx) }));
+    scns.forEach(s=>{ const act = lastBefore(acts, s.idx); const head = (act? act.label : "Akt"); anchors.push({ label: head+" • "+s.label, idx: firstCueAfter(s.idx) }); });
+
+    return { cues, anchors };
+  }
+
+  function splitStageSegments(s){ const segs=[]; const re=/\((?:.|\n)*?\)/g; let last=0, m; while((m=re.exec(s))!==null){ if(m.index>last) segs.push({text:s.slice(last,m.index), isDir:false}); segs.push({text:m[0], isDir:true}); last=m.index+m[0].length; } if(last<s.length) segs.push({text:s.slice(last), isDir:false}); return segs; }
+  function charsHTML(text, progress){ const s=text||''; const segs=splitStageSegments(s); const n=s.length; const limit=Math.floor((Math.max(0,Math.min(1,progress??0)))*n); let out='', seen=0; for(const seg of segs){ const wrapStart=seg.isDir?'<span class="stageDir">':''; const wrapEnd=seg.isDir?'</span>':''; out+=wrapStart+'<span class="chars">'; for(let i=0;i<seg.text.length;i++){ const ch=seg.text[i]; const esc= ch==='&'?'&amp;': ch==='<'?'&lt;': ch==='>'?'&gt;': (ch===' ' ? '&nbsp;' : ch); const cls=(seen<limit)?'c filled':'c'; out+='<span class="'+cls+'">'+esc+'</span>'; seen++; } out+='</span>'+wrapEnd; } return out; }
+  function speakerHTML(c){ return `<span class="speaker">${escHtml(c.speaker)}:</span>`; }
+
+  // --- Fixed Roles (requested) ---
+  const FIXED_ROLE_LABELS = ["Alle", "Alle drei", "Britta", "Gitta", "Gretchen", "Hinnerk", "Kapitän", "Lieschen", "Mäggie", "Toni", "Willi", "Frauen"];
+  function norm(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+  function labelMatchesSpeaker(label, speaker){
+    const L = norm(label), S = norm(speaker);
+    if (!L || L === 'alle') return true;
+    if (S.includes(L)) return true;
+    const parts = L.split(/\s*\+\s*|\s+und\s+/i).map(x=>x.trim()).filter(Boolean);
+    if (parts.length > 1){ for (const p of parts){ if (S.includes(p)) return true; } }
+    return false;
+  }
+  function isSpeakerVisibleByLabels(speaker, selected){ if (!selected || !selected.length) return true; for (const lab of selected){ if (labelMatchesSpeaker(lab, speaker)) return true; } return false; }
+
+  function extractRoles(){ state.roles = FIXED_ROLE_LABELS.slice(); }
+  function buildVisibleSet(){ const N=state.cues.length; state.visible=new Array(N).fill(true); const sel=state.roleSel||[];
+    if(sel.length){ state.visible=new Array(N).fill(false); for(let i=0;i<N;i++){ const sp=state.cues[i].speaker||''; if(isSpeakerVisibleByLabels(sp, sel)){ state.visible[i]=true; if(i-1>=0) state.visible[i-1]=true; if(i+1<N) state.visible[i+1]=true; } } }
+  }
+  function nextVisible(i){ const N=state.cues.length; for(let j=i+1;j<N;j++) if(state.visible[j]) return j; return -1; }
+  function prevVisible(i){ for(let j=i-1;j>=0;j--) if(state.visible[j]) return j; return -1; }
+  function firstVisibleFrom(pos){ const N=state.cues.length; for(let j=Math.max(0,pos); j<N; j++) if(state.visible[j]) return j; return -1; }
+
+  function renderRoles(){ const list=$('rolesList'); list.innerHTML=''; if(!state.roles||!state.roles.length){ list.innerHTML='<div class="small">Keine Rollen verfügbar.</div>'; return; } state.roles.forEach(name=>{ const row=document.createElement('div'); row.className='item'; const label=document.createElement('label'); label.className='small'; label.textContent=name; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=state.roleSel.includes(name); cb.addEventListener('change', ()=>{ if(cb.checked){ if(!state.roleSel.includes(name)) state.roleSel.push(name); } else { state.roleSel=state.roleSel.filter(x=>x!==name); } save('v18p_roles', state.roleSel); buildVisibleSet(); let j=firstVisibleFrom(state.i); if(j<0) j=0; state.i=j; render(0); }); row.appendChild(label); row.appendChild(cb); list.appendChild(row); }); }
+  function rolesSelectAll(){ state.roleSel=[...FIXED_ROLE_LABELS]; save('v18p_roles', state.roleSel); renderRoles(); buildVisibleSet(); state.i=firstVisibleFrom(0); render(0); }
+  function rolesClearAll(){ state.roleSel=[]; save('v18p_roles', state.roleSel); renderRoles(); buildVisibleSet(); state.i=0; render(0); }
+
+  function render(progress){
+    updateFavUI();
+
+    const N=state.cues.length;
+    $('badge').textContent = N + ' Dialoge';
+    if(!N){ $('prev').textContent=''; $('curr').textContent='Keine Dialoge erkannt.'; $('next').textContent=''; $('hud').textContent='—'; return; }
+    state.i = Math.max(0, Math.min(state.i, N-1));
+
+    const prevIdx = prevVisible(state.i);
+    const nextIdx = nextVisible(state.i);
+    const curr=state.cues[state.i];
+
+    $('prev').innerHTML = (prevIdx>=0) ? `${speakerHTML(state.cues[prevIdx])} ${escHtml(state.cues[prevIdx].text)}` : '';
+    const p=Math.max(0,Math.min(1,progress??0));
+    $('curr').innerHTML = `${speakerHTML(curr)} ${charsHTML(curr.text, p)}`;
+    $('next').innerHTML = (nextIdx>=0) ? `${speakerHTML(state.cues[nextIdx])} ${escHtml(state.cues[nextIdx].text)}` : '';
+
+    $('hud').textContent = `Akt: ${curr.act||'—'} • Szene: ${curr.scene||'—'} • Position: ${state.i+1}/${N}`;
+    autoFitCurrent();
+  }
+
+  function autoFitCurrent(){ const vp=$('viewport'), curr=$('curr'); if(!vp||!curr) return; const avail=vp.clientHeight-8; document.documentElement.style.setProperty('--autoScale',1); requestAnimationFrame(()=>{ const h=curr.scrollHeight; let factor=1; if(h>avail && h>0) factor=Math.max(0.6, Math.min(1,(avail/h)*0.98)); document.documentElement.style.setProperty('--autoScale',factor); }); }
+
+  function buildToc(){ const el=$('toc'); el.innerHTML=''; if(!state.anchors.length){ el.innerHTML='<i class="small">Keine Akte/Szenen gefunden.</i>'; return; } const groups={}; state.anchors.forEach(a=>{ const m=a.label.match(/^(\d+)\.\s*Akt/); const ak=m?m[1]:'_'; if(!groups[ak]) groups[ak]={head:`${ak}. Akt`, items:[]}; groups[ak].items.push(a); }); Object.keys(groups).sort((a,b)=>(a==='_'?1:Number(a))-(b==='_'?1:Number(b))).forEach(k=>{ const g=groups[k]; const wrap=document.createElement('div'); wrap.className='card'; wrap.style.margin='8px 0'; const head=document.createElement('div'); head.className='row'; head.innerHTML=`<div style="font-weight:800">${g.head}</div>`; wrap.appendChild(head); const row=document.createElement('div'); row.className='row'; g.items.sort((A,B)=>(A.label.includes('•')-B.label.includes('•'))); g.items.forEach((it)=>{ const b=document.createElement('button'); b.className='btn-mini'; b.textContent = it.label.includes('•') ? it.label.replace(/^\d+\.\s*Akt\s*•\s*/,'') : g.head; b.disabled = it.idx==null; b.addEventListener('click', ()=>{ stopAuto(); buildVisibleSet(); let j=firstVisibleFrom(it.idx??0); if(j<0) j=0; state.i=j; render(0); }); row.appendChild(b); }); wrap.appendChild(row); el.appendChild(wrap); }); }
+
+  function runSearch(){ const q=$('q').value.trim(); const hits=[]; if(q){ for(let i=0;i<state.cues.length;i++){ const c=state.cues[i]; const block=(c.speaker+"\n"+c.text).toLowerCase(); if(block.includes(q.toLowerCase())) hits.push(i); } } state.hits=hits; state.hitIdx=hits.length?0:-1; renderHits(); if(hits.length){ stopAuto(); buildVisibleSet(); let j=firstVisibleFrom(hits[0]); if(j<0) j=0; state.i=j; render(0); } $('hitInfo').textContent=hits.length+' Treffer'; }
+  function renderHits(){ const list=$('hitList'); list.innerHTML=''; state.hits.slice(0,120).forEach((idx)=>{ const c=state.cues[idx]; const div=document.createElement('div'); div.className='item'; const label=document.createElement('div'); label.className='small'; label.textContent = `${c.speaker} – ${(c.text||'').replace(/\s+/g,' ').slice(0,80)}${(c.text||'').length>80?'…':''}`; div.appendChild(label); const go=document.createElement('button'); go.className='btn-mini'; go.textContent='Jump'; go.addEventListener('click', ()=>{ stopAuto(); buildVisibleSet(); let j=firstVisibleFrom(idx); if(j<0) j=0; state.i=j; render(0); }); div.appendChild(go); list.appendChild(div); }); }
+  function gotoHit(d){ if(!state.hits.length) return; state.hitIdx=(state.hitIdx+d+state.hits.length)%state.hits.length; stopAuto(); buildVisibleSet(); let j=firstVisibleFrom(state.hits[state.hitIdx]); if(j<0) j=0; state.i=j; render(0); }
+
+  function stopAuto(){ if(state.raf){ cancelAnimationFrame(state.raf); state.raf=null; } $('btnPlay').textContent='▶︎ Auto'; }
+  function startAuto(){ stopAuto(); $('btnPlay').textContent='⏸︎ Auto'; const duration=Math.max(600, Number($('playMs').value)||3000); state.playStart=performance.now();
+    const tick=(now)=>{ const t=now-state.playStart; let p=t/duration; if(p>=1){ let nxt=nextVisible(state.i); if(nxt<0){ if($('loop').checked) nxt=firstVisibleFrom(0); else { stopAuto(); render(1); return; } } state.i=nxt; state.playStart=performance.now(); p=0; } render(p); state.raf=requestAnimationFrame(tick); };
+    state.raf=requestAnimationFrame(tick);
+  }
+
+  function applyTheme(t){ const r=document.documentElement;
+    if (t==='light'){ r.style.setProperty('--bg','#f8fafc'); r.style.setProperty('--fg','#0b1220'); r.style.setProperty('--cueColor','#000000'); r.style.setProperty('--card','#ffffff'); r.style.setProperty('--border','#d4d4d4'); r.style.setProperty('--muted','#475569'); $('btnTheme').textContent='☀️'; }
+    else { r.style.setProperty('--bg','#0b1220'); r.style.setProperty('--fg','#e5e7eb'); r.style.setProperty('--cueColor','#ffffff'); r.style.setProperty('--card','#0f172a'); r.style.setProperty('--border','#1f2a44'); r.style.setProperty('--muted','#94a3b8'); $('btnTheme').textContent='🌙'; }
+    save('v18p_theme', t);
+  }
+  function applyFocus(on){ document.body.classList.toggle('focus', !!on); save('v18p_focus', !!on); autoFitCurrent(); }
+  function applyHideDirs(on){ document.body.classList.toggle('hideDirs', !!on); save('v18p_hideDirs', !!on); }
+
+  (function init(){
+
+// [FAV v2] wiring
+document.getElementById('btnFavToggle')?.addEventListener('click', ()=> toggleFav() );
+document.getElementById('btnFavs')?.addEventListener('click', ()=>{ $('favPanel').classList.toggle('open'); updateFavUI(); });
+document.getElementById('btnFavClose')?.addEventListener('click', ()=>{ $('favPanel').classList.remove('open'); });
+document.getElementById('btnFavClear')?.addEventListener('click', ()=>{ state.favs = new Set(); saveFavs(); updateFavUI(); });
+
+document.addEventListener('keydown', (e)=>{
+  if (e.key.toLowerCase()==='f' && !e.shiftKey && !e.altKey && !e.ctrlKey){
+    e.preventDefault();
+    toggleFav();
+  }
+});
+
+
+    const savedScale = load('v18p_scale', 1); setScale(savedScale||1); $('sizeSlider').value = savedScale||1;
+
+    const raw = (document.getElementById('playtext')?.value) || '';
+    const { cues, anchors } = parseAll(raw);
+    state.cues = cues; state.anchors = anchors; state.i = 0;
+
+    // Fixed roles init
+    state.roleSel = load('v18p_roles', []);
+    extractRoles(); renderRoles(); buildVisibleSet();
+
+    state.i = firstVisibleFrom(0) >= 0 ? firstVisibleFrom(0) : 0;
+    render(0); buildToc();
+
+    $('btnPrev').addEventListener('click', ()=>{ stopAuto(); const j=prevVisible(state.i); if(j>=0) state.i=j; render(0); });
+    $('btnNext').addEventListener('click', ()=>{ stopAuto(); const j=nextVisible(state.i); if(j>=0) state.i=j; render(0); });
+    $('btnToc').addEventListener('click', ()=>{ $('toc').classList.toggle('open'); });
+    $('btnPlay').addEventListener('click', ()=>{ state.raf ? stopAuto() : startAuto(); });
+    $('playMs').addEventListener('input', ()=>{ if(state.raf) startAuto(); });
+    $('sizeSlider').addEventListener('input', e=> setScale(e.target.value) );
+
+    $('btnSearch').addEventListener('click', ()=> $('searchPanel').classList.toggle('open') );
+
+    $('btnFind').addEventListener('click', runSearch);
+    $('btnPrevHit').addEventListener('click', ()=> gotoHit(-1));
+    $('btnNextHit').addEventListener('click', ()=> gotoHit(+1));
+
+    $('btnRoles').addEventListener('click', ()=> $('rolesPanel').classList.toggle('open') );
+    document.getElementById('rolesAll').addEventListener('click', rolesSelectAll);
+    document.getElementById('rolesClear').addEventListener('click', rolesClearAll);
+
+    $('btnStage').addEventListener('click', ()=>{ const on=!document.body.classList.contains('hideDirs'); applyHideDirs(on); });
+
+    let theme = load('v18p_theme','dark'); applyTheme(theme);
+    $('btnTheme').addEventListener('click', ()=>{ theme = (theme==='dark')?'light':'dark'; applyTheme(theme); });
+    let focus = load('v18p_focus', false); applyFocus(focus);
+    $('btnFocus').addEventListener('click', ()=>{ focus = !focus; applyFocus(focus); });
+    document.getElementById('focusFloat').addEventListener('click', ()=> applyFocus(false));
+
+    // Swipe navigation
+    const vp=$('viewport'); let sx=null, sy=null, moved=false; const SW=40;
+    vp.addEventListener('pointerdown', e=>{ sx=e.clientX; sy=e.clientY; moved=false; });
+    vp.addEventListener('pointermove', e=>{ if(sx!=null){ if(Math.abs(e.clientX-sx)>6 || Math.abs(e.clientY-sy)>6) moved=true; } });
+    vp.addEventListener('pointerup', e=>{ if(sx!=null){ const dx=e.clientX-sx, dy=e.clientY-sy; if(Math.abs(dx)>SW && Math.abs(dx)>Math.abs(dy)){ if(dx<0) $('btnNext').click(); else $('btnPrev').click(); } else if(!moved){ $('btnNext').click(); } } sx=sy=null; moved=false; }, {passive:true});
+
+    window.addEventListener('resize', autoFitCurrent);
+    const ro=new ResizeObserver(()=> autoFitCurrent()); ro.observe($('curr'));
+
+    window.addEventListener('keydown', (e)=>{ const tag=(document.activeElement&&document.activeElement.tagName)||''; if(tag==='INPUT'||tag==='TEXTAREA') return;
+      if (e.key==='ArrowRight'){ e.preventDefault(); $('btnNext').click(); }
+      if (e.key==='ArrowLeft'){ e.preventDefault(); $('btnPrev').click(); }
+      if (e.key===' '){ e.preventDefault(); state.raf ? stopAuto() : startAuto(); }
+    });
+  })();
+
+// [FAV v2] helpers
+function isFav(i){ return state.favs && state.favs.has(i); }
+function saveFavs(){ try{ save('v18p_favs', [...state.favs]); }catch(e){} }
+function toggleFav(i){
+  if (i==null) i = state.i;
+  if (!state.favs) state.favs = new Set();
+  if (state.favs.has(i)) state.favs.delete(i); else state.favs.add(i);
+  saveFavs(); updateFavUI(); render(0);
+}
+function updateFavUI(){
+  const tgl = document.getElementById('btnFavToggle');
+  if (tgl){
+    const fav = isFav(state.i);
+    tgl.setAttribute('aria-pressed', fav ? 'true' : 'false');
+    tgl.textContent = fav ? '⭐ Gemerkt' : '☆ Merken';
+    tgl.title = fav ? 'Favorit entfernen (F)' : 'Aktuellen Dialog merken (F)';
+  }
+  const list = document.getElementById('favList');
+  const cnt = document.getElementById('favCount');
+  if (!list) return;
+  const favIdxs = [...(state.favs||new Set())].sort((a,b)=>a-b);
+  list.innerHTML = '';
+  if (cnt) cnt.textContent = favIdxs.length ? ('⭐ ' + favIdxs.length + ' Favoriten') : 'Keine Favoriten';
+  favIdxs.forEach((idx)=>{
+    const c = state.cues[idx];
+    if (!c) return;
+    const row = document.createElement('div'); row.className = 'favItem';
+    const jump = document.createElement('button'); jump.className='favJump btn-mini';
+    const label = (c.act? c.act+' • ' : '') + (c.scene? c.scene+' • ' : '') + (c.speaker? '['+c.speaker+'] ' : '');
+    const preview = (c.text||'').slice(0, 50).replace(/\s+/g,' ');
+    jump.textContent = label + preview + (c.text && c.text.length>50 ? '…' : '');
+    jump.addEventListener('click', ()=>{ stopAuto(); state.i = idx; render(0); document.getElementById('favPanel')?.classList.remove('open'); });
+    const del = document.createElement('button'); del.className='favDel btn-mini'; del.textContent='×';
+    del.title = 'Favorit löschen';
+    del.addEventListener('click', ()=>{ state.favs.delete(idx); saveFavs(); updateFavUI(); });
+    row.appendChild(jump); row.appendChild(del); list.appendChild(row);
+  });
+}
+
+</script></div>
+  <div class="row">
+    <button id="btnAddMark" class="btn-mini">★ Merken</button>
+    <button id="btnClearMarks" class="btn-mini">Alle löschen</button>
+  </div>
+  <div id="markList" class="list"></div>
+</div>
+<script id="blueclick-js">
+document.addEventListener("click", e => {
+  const el = e.target.closest("button, input[type=range], select");
+  if (!el) return;
+  el.classList.add("clicked");
+  setTimeout(() => el.classList.remove("clicked"), 200);
+});
+</script>
+
+
+<script id="speaker-colorizer">
+document.addEventListener('DOMContentLoaded', () => {
+  const textContainer = document.getElementById('playtext') || document.body;
+  if (!textContainer) return;
+  function colorizeSpeakers(el) {
+    const re = /^([A-ZÄÖÜa-zäöüß0-9 .\-]+):/gm;
+    el.innerHTML = el.innerHTML.replace(re, '<span class="speaker">$1</span>:');
+  }
+  colorizeSpeakers(textContainer);
+});
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var sticky = document.getElementById('btnFavSticky');
+  var tgl    = document.getElementById('btnFavToggle'); // toolbar "☆ Merken / ⭐ Gemerkt"
+  var prev   = document.getElementById('btnFavPrev');
+  var next   = document.getElementById('btnFavNext');
+  if (!tgl) return;
+
+  function sync(){
+    var pressed = tgl.getAttribute('aria-pressed') === 'true';
+    if (sticky){
+      sticky.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+      sticky.textContent = pressed ? '⭐ Gemerkt' : '☆ Merken';
+      sticky.title = pressed ? 'Favorit entfernen (F)' : 'Aktuellen Dialog merken (F)';
+    }
+  }
+
+  // bottom "Merken" mirrors toolbar button
+  if (sticky){ sticky.addEventListener('click', function(){ tgl.click(); }); }
+
+  // observe toolbar button for changes
+  var mo = new MutationObserver(sync);
+  mo.observe(tgl, { attributes: true, attributeFilter: ['aria-pressed'] });
+  sync();
+
+  function getSortedFavs(){
+    try{
+      return Array.from(state.favs || new Set()).sort(function(a,b){ return a-b; });
+    }catch(e){ return []; }
+  }
+
+  function jumpFav(dir){
+    var favs = getSortedFavs();
+    if (!favs.length) return;
+    var i = state.i || 0;
+
+    if (dir > 0){
+      // next favorite strictly greater than current index; wrap to first
+      var idx = favs.findIndex(function(v){ return v > i; });
+      if (idx === -1) idx = 0;
+      state.i = favs[idx];
+    } else {
+      // previous favorite less or equal current -> choose last less than current; wrap to last
+      var idx = -1;
+      for (var k=0; k<favs.length; k++){ if (favs[k] < i) idx = k; }
+      if (idx === -1) idx = favs.length - 1;
+      state.i = favs[idx];
+    }
+    stopAuto();
+    render(0);
+  }
+
+  if (prev){ prev.addEventListener('click', function(){ jumpFav(-1); }); }
+  if (next){ next.addEventListener('click', function(){ jumpFav(1); }); }
+});
+</script>
+
+
+
+
+<script>
+// [FavAuto v7] Autoplay all dialogs to last favorite; optional loop back to first
+(function(){
+  var autoBtn, watcher = null, prevLoop = null, lastIdx = 0;
+
+  function byId(id){ return document.getElementById(id); }
+  function getSortedFavs(){
+    try{ return Array.from(state.favs || new Set()).sort(function(a,b){ return a-b; }); }
+    catch(e){ return []; }
+  }
+  function firstFav(){ var f = getSortedFavs(); return f.length? f[0] : -1; }
+  function lastFav(){ var f = getSortedFavs(); return f.length? f[f.length-1] : -1; }
+  function isRunning(){ return autoBtn && autoBtn.getAttribute('data-running')==='1'; }
+
+  function loopEnabled(){
+    var el = byId('chkFavLoop');
+    return el ? el.checked : false;
+  }
+  function loadLoop(){
+    try{
+      var v = localStorage.getItem('favAutoLoop');
+      if (v !== null){
+        var el = byId('chkFavLoop');
+        if (el) el.checked = (v === '1');
+      }
+    }catch(e){}
+  }
+  function saveLoop(){
+    try{
+      var el = byId('chkFavLoop');
+      if (el) localStorage.setItem('favAutoLoop', el.checked ? '1' : '0');
+    }catch(e){}
+  }
+
+  function start(){
+    var lf = lastFav();
+    if (lf < 0){ return; }                    // no favorites
+    // disable global loop while we run to avoid wrapping to start
+    var loopEl = byId('loop');
+    prevLoop = loopEl ? loopEl.checked : null;
+    if (loopEl) loopEl.checked = false;
+
+    // start global autoplay from current position
+    if (typeof startAuto === 'function') startAuto();
+
+    lastIdx = state.i || 0;
+    // set up watcher
+    watcher = setInterval(function(){
+      try{
+        if (!state || typeof state.i !== 'number'){ return; }
+        var cur = state.i;
+        if (cur >= lf){
+          if (loopEnabled()){
+            var ff = firstFav();
+            if (ff >= 0){
+              state.i = ff;
+              lastIdx = state.i; // reset tracker so we don't mis-detect wrap
+              // keep autoplay running; no stop
+              return;
+            }
+          }
+          stop(); // stop at last fav if no loop
+          return;
+        }
+        if (cur < lastIdx){
+          // likely wrapped or manual backward jump -> stop unless loop is enabled and we just reset
+          if (!loopEnabled()){
+            stop();
+            return;
+          } else {
+            // if loop is enabled, allow a backward jump only if we are at/near firstFav
+            var ff2 = firstFav();
+            if (ff2 >= 0 && cur <= ff2) {
+              lastIdx = cur;
+              return;
+            } else {
+              stop();
+              return;
+            }
+          }
+        }
+        lastIdx = cur;
+      }catch(e){ /* ignore */ }
+    }, 200);
+    autoBtn.setAttribute('data-running','1');
+    autoBtn.textContent = 'Auto ⏸';
+    autoBtn.title = loopEnabled() ? 'Dauerschleife aktiv – bis letztem Favoriten und zurück' : 'Auto bis letztem Favoriten stoppen';
+  }
+
+  function stop(){
+    if (watcher){ clearInterval(watcher); watcher = null; }
+    if (typeof stopAuto === 'function') stopAuto();
+    // restore loop checkbox
+    var loopEl = byId('loop');
+    if (loopEl && prevLoop !== null) loopEl.checked = prevLoop;
+    autoBtn.removeAttribute('data-running');
+    autoBtn.textContent = 'Auto ▶';
+    autoBtn.title = 'Favoriten automatisch (optional Dauerschleife)';
+  }
+
+  function toggle(){
+    if (isRunning()) stop(); else start();
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    autoBtn = byId('btnFavAuto');
+    loadLoop();
+    var chk = byId('chkFavLoop');
+    if (chk){ chk.addEventListener('change', function(){ saveLoop(); if (isRunning()){ autoBtn.click(); autoBtn.click(); } }); }
+    if (!autoBtn) return;
+    autoBtn.textContent = 'Auto ▶';
+    autoBtn.title = 'Favoriten automatisch (optional Dauerschleife)';
+    autoBtn.addEventListener('click', toggle);
+    document.addEventListener('keydown', function(e){ if (e.key==='Escape') stop(); });
+  });
+})();
+</script>
+
+
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  try{
+    var countEl = document.getElementById('infoCount');
+    if (countEl){
+      var n = (window.state && Array.isArray(state.cues)) ? state.cues.length : null;
+      countEl.textContent = (n!=null) ? (n + ' Dialoge') : '– Dialoge';
+    }
+    // If you want to derive version dynamically from the document title, uncomment:
+    // var verEl = document.getElementById('infoVersion');
+    // if (verEl && document.title) verEl.textContent = document.title;
+  }catch(e){ /* no-op */ }
+});
+</script>
+
+
+<!-- === Hide/Reveal for #curr with gamma-mapped transparency (0–30% visible), 30px offset === -->
+<style id="hideRevealCSS">
+  #hr_overlay {
+    position: fixed; left: 0; top: 0; width: 0; height: 0;
+    z-index: 2147483600;
+    background: rgba(0,0,0,1);
+    color: #fff;
+    display: none;
+    cursor: pointer;
+    border-radius: .25rem;
+    user-select: none;
+  }
+  #hr_overlay .hr_hint {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%,-50%);
+    font: 600 16px/1.2 system-ui, sans-serif;
+    text-align: center;
+    opacity: .95;
+    padding: .6rem .8rem;
+    border: 1px solid rgba(255,255,255,.35);
+    border-radius: .5rem;
+    background: rgba(0,0,0,.25);
+  }
+</style>
+
+<div id="hr_overlay" aria-hidden="true">
+  <div class="hr_hint">Klicken zum Anzeigen</div>
+</div>
+
+<script id="hideRevealJS">
+(function(){
+  const overlay = document.getElementById('hr_overlay');
+  const hrEnable = document.getElementById('hr_enable');
+  const hrRange  = document.getElementById('hr_range');
+  let isHidden = true; // start covered
+
+  function currEl(){ return document.getElementById('curr'); }
+
+  function placeOverCurr(){
+    const curr = currEl();
+    if(!curr){ overlay.style.display='none'; return; }
+    const r = curr.getBoundingClientRect();
+    const OFFSET = 30; // keep speaker line visible
+    const top = r.top + OFFSET;
+    const height = Math.max(0, r.height - OFFSET);
+    overlay.style.left = r.left + 'px';
+    overlay.style.top = top + 'px';
+    overlay.style.width = r.width + 'px';
+    overlay.style.height = height + 'px';
+  }
+
+  function setAlphaFromSlider(){
+    if(!hrRange) return;
+    const val = parseInt(hrRange.value || '85', 10); // 70..100
+    // Map to 0..30% visibility with gamma (1.8): alpha = 1 - pow((val-70)/30, 1.8)*0.3
+    const t = Math.max(0, Math.min(1, (val - 70) / 30));
+    const alpha = 1 - Math.pow(t, 1.8) * 0.3; // 1.0 .. 0.7
+    overlay.style.background = 'rgba(0,0,0,' + alpha + ')';
+  }
+
+  function apply(){
+    placeOverCurr();
+    if(!hrEnable || !hrEnable.checked){ overlay.style.display='none'; return; }
+    overlay.style.display = isHidden ? 'block' : 'none';
+    if(isHidden) setAlphaFromSlider();
+  }
+
+  // Clicking the overlay reveals text (hide overlay)
+  overlay.addEventListener('click', function(e){
+    if(!hrEnable || !hrEnable.checked) return;
+    e.preventDefault();
+    isHidden = false;
+    apply();
+  });
+
+  // Clicking inside #curr hides text again (show overlay)
+  function attachCurrClick(){
+    const curr = currEl();
+    if(!curr) return;
+    if(curr.__hrBound) return;
+    curr.addEventListener('click', function(){
+      if(!hrEnable || !hrEnable.checked) return;
+      if(!isHidden){ isHidden = true; apply(); }
+    });
+    curr.__hrBound = true;
+  }
+
+  function hook(){
+    attachCurrClick();
+    apply();
+    ['scroll','resize','orientationchange'].forEach(ev=>{
+      window.addEventListener(ev, ()=>{ if(isHidden) apply(); }, {passive:true});
+    });
+    if(typeof window.render==='function' && !window.render.__hrHookedGamma){
+      const R = window.render;
+      window.render = function(){
+        const out = R.apply(this, arguments);
+        try{
+          attachCurrClick();
+          apply();
+        }catch(_){}
+        return out;
+      };
+      window.render.__hrHookedGamma = true;
+    }
+  }
+
+  hrRange && hrRange.addEventListener('input', function(){
+    if(overlay.style.display !== 'none'){ setAlphaFromSlider(); }
+  });
+
+  hrEnable && hrEnable.addEventListener('change', function(){
+    apply();
+  });
+
+  document.addEventListener('DOMContentLoaded', hook);
+})();
+</script>
+
+
+<script>
+(function(){
+  const NEW_ROLES = ["Alle", "Alle drei", "Britta", "Gitta", "Gretchen", "Hinnerk", "Kapitän", "Lieschen", "Mäggie", "Toni", "Willi", "Frauen"];
+
+  function rebuildSelect(sel){
+    if (!sel) return;
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    for (const name of NEW_ROLES){
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    }
+  }
+
+  function cleanRoleFilters(){
+    const qs = [
+      'select#roles','select#roleFilter','select#rolesFilter','select#roles-select',
+      'select[name="roles"]','select[id*="role"]','select[id*="Roles"]'
+    ];
+    for (const q of qs){
+      document.querySelectorAll(q).forEach(el=> rebuildSelect(el));
+    }
+  }
+
+  function alias(x){
+    x = String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
+    if (x === 'die frauen') x = 'frauen';
+    x = x.replace(/kapitätn\./g,'kapitän').replace(/kapitän\./g,'kapitän');
+    return x;
+  }
+  window.labelMatchesSpeaker = function(label, speaker){
+    const L = alias(label), S = alias(speaker);
+    if (!L || L === 'alle') return true;
+    if (S.includes(L)) return true;
+    const parts = L.split(/\s*\+\s*|\s+und\s+/).map(s=>s.trim()).filter(Boolean);
+    if (parts.length > 1){
+      for (const p of parts){ if (S.includes(p)) return true; }
+    }
+    return false;
+  };
+
+  function onReady(){
+    cleanRoleFilters();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onReady);
+  else onReady();
+
+  if (typeof window.render === 'function' && !window.render.__rolesClean){
+    const R = window.render;
+    window.render = function(){
+      const out = R.apply(this, arguments);
+      try{ cleanRoleFilters(); }catch(e){}
+      return out;
+    };
+    window.render.__rolesClean = true;
+  }
+})();
+</script>
+
+
+<script>
+(function(){
+  const $ = (id)=>document.getElementById(id);
+  const l2Enable = $('l2_enable');
+  const l2Step   = $('l2_step');
+  const l2Val    = $('l2_step_val');
+
+  // Persist simple settings
+  try{
+    const savedOn = localStorage.getItem('tk.l2.on');
+    const savedN  = localStorage.getItem('tk.l2.n');
+    if (savedOn !== null) l2Enable.checked = (savedOn === '1');
+    if (savedN !== null && !isNaN(+savedN)) { l2Step.value = String(Math.max(2, Math.min(8, +savedN))); }
+  }catch(_){}
+
+  if (l2Val) l2Val.textContent = l2Step ? l2Step.value : '3';
+
+  function saveState(){
+    try{
+      localStorage.setItem('tk.l2.on', l2Enable && l2Enable.checked ? '1' : '0');
+      localStorage.setItem('tk.l2.n',  l2Step ? String(l2Step.value) : '3');
+    }catch(_){}
+  }
+
+  function getCurr(){
+    var n = document.getElementById('curr');
+    if (n) return n;
+    return document.querySelector('.cue.current, .cue--current, [data-current="true"]');
+  }
+
+  // Remove previous masking spans and restore original words
+  function l2Unmask(node){
+    if (!node) return;
+    const spans = node.querySelectorAll('.tk-mask-word');
+    spans.forEach(sp => {
+      const orig = sp.getAttribute('data-orig') || sp.textContent;
+      const txt = document.createTextNode(orig);
+      sp.replaceWith(txt);
+    });
+  }
+
+  // Unicode-word regex parts
+  const WORD_RE = /[\p{L}\p{M}\p{Nd}][\p{L}\p{M}\p{Nd}’'\-]*/u;
+
+  // Tokenize a text into [ {type:'word'|'other', text}... ]
+  function tokenize(text){
+    const out = [];
+    let i = 0;
+    while (i < text.length){
+      // try word
+      WORD_RE.lastIndex = 0;
+      const slice = text.slice(i);
+      const m = slice.match(WORD_RE);
+      if (m && m.index === 0){
+        out.push({type:'word', text:m[0]});
+        i += m[0].length;
+        continue;
+      }
+      // otherwise take one char as non-word and continue
+      out.push({type:'other', text:text[i]});
+      i += 1;
+    }
+    return out;
+  }
+
+  // Build fragment for a text node, applying masking after speaker colon
+  function maskTextNode(tn, wordStartIndex, step, speakerPassedRef){
+    const text = tn.nodeValue;
+    if (!text) return {frag:null, wordsUsed:0};
+
+    const tokens = tokenize(text);
+    const frag = document.createDocumentFragment();
+    let wordsUsed = 0;
+
+    for (const tok of tokens){
+      if (tok.type === 'word'){
+        if (!speakerPassedRef.passed){
+          // Has the speaker section ended? Look back in accumulated tokens -> we detect colon only in non-word tokens.
+          // Here inside a word, we simply don't mask until we encountered ':' previously.
+          frag.appendChild(document.createTextNode(tok.text));
+        } else {
+          const position = wordStartIndex + wordsUsed + 1; // 1-based
+          if (step > 1 && position % step === 0){
+            const sp = document.createElement('span');
+            sp.className = 'tk-mask-word';
+            sp.setAttribute('data-orig', tok.text);
+            sp.textContent = '…';
+            frag.appendChild(sp);
+          } else {
+            frag.appendChild(document.createTextNode(tok.text));
+          }
+        }
+        wordsUsed += 1;
+      } else {
+        // non-word
+        frag.appendChild(document.createTextNode(tok.text));
+        if (tok.text.indexOf(':') !== -1 && !speakerPassedRef.passed){
+          // First colon ends the speaker prefix
+          speakerPassedRef.passed = true;
+        }
+      }
+    }
+    return {frag, wordsUsed};
+  }
+
+  function l2Apply(){
+    const curr = getCurr();
+    if (!curr) return;
+    const step = parseInt(l2Step ? l2Step.value : '3', 10) || 3;
+    if (!l2Enable || !l2Enable.checked){ 
+      // ensure unmasked
+      l2Unmask(curr);
+      return; 
+    }
+
+    // Start clean
+    l2Unmask(curr);
+
+    // Walk text nodes inside curr and rebuild
+    const walker = document.createTreeWalker(curr, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){
+        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        // ignore text inside script/style
+        const p = n.parentElement;
+        if (!p) return NodeFilter.FILTER_REJECT;
+        const tag = p.tagName && p.tagName.toLowerCase();
+        if (tag === 'script' || tag === 'style') return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+
+    let wordIndex = 0; // counts words after speaker colon
+    const speakerPassedRef = {passed:false};
+
+    const nodes = [];
+    while (walker.nextNode()){
+      nodes.push(walker.currentNode);
+    }
+    for (const tn of nodes){
+      const {frag, wordsUsed} = maskTextNode(tn, wordIndex, step, speakerPassedRef);
+      if (frag){
+        tn.parentNode.replaceChild(frag, tn);
+        wordIndex += wordsUsed;
+      }
+    }
+  }
+
+  // Wire UI
+  l2Enable && l2Enable.addEventListener('change', function(){
+    saveState();
+    l2Apply();
+  });
+  l2Step && l2Step.addEventListener('input', function(){
+    if (l2Val) l2Val.textContent = l2Step.value;
+    saveState();
+    l2Apply();
+  });
+
+  // Hook into render()
+  if (typeof window.render === 'function' && !window.render.__tkL2){
+    const R = window.render;
+    window.render = function(){
+      const out = R.apply(this, arguments);
+      try { l2Apply(); } catch(_){}
+      return out;
+    };
+    window.render.__tkL2 = true;
+  }
+
+  // Initial run
+  document.addEventListener('DOMContentLoaded', function(){
+    l2Apply();
+  });
+})();
+</script>
+<style>
+/* Optional: leichte Markierung der Masken (kann entfernt werden) */
+.tk-mask-word{ display:inline-block; min-width:0.6em; text-align:center; }
+</style>
+
+
+<!-- Lernmodus Sidebar -->
+<div id="lm_sidebar_backdrop"></div>
+<aside id="lm_sidebar" aria-hidden="true">
+  <div id="lm_sidebar_head">
+    <div>🎓 Lernmodus</div>
+    <button id="lm_close" title="Schließen">×</button>
+  </div>
+  <div id="lm_sidebar_body">
+    <section>
+      <div style="font-weight:600; margin-bottom:6px;">Wort-Maskierung (L2)</div>
+      <div class="row">
+        <label><input type="checkbox" id="lm_L2_chk"> L2 aktiv</label>
+      </div>
+      <div class="row">
+        <label for="lm_n">jedes n‑te Wort</label>
+        <input id="lm_n" type="range" min="2" max="8" step="1" value="3">
+        <span id="lm_n_val" style="opacity:.8;font-size:12px;">3</span>
+      </div>
+    </section>
+  
+    <section id="lm_l3_section">
+      <div style="font-weight:600; margin-bottom:6px;">Erste Wörter sichtbar (L3)</div>
+      <div class="row">
+        <label><input type="checkbox" id="lm_L3_chk"> L3 aktiv</label>
+      </div>
+      <div class="row">
+        <label for="lm_firstN">Sichtbar</label>
+        <input id="lm_firstN" type="range" min="0" max="20" step="1" value="3">
+        <span id="lm_firstN_val" style="opacity:.8;font-size:12px;">3</span>
+      </div>
+    </section>
+
+  
+    <section id="lm_roles_section">
+      <div style="font-weight:600; margin-bottom:6px;">Rollen (Lernmodus)</div>
+      <div class="row" style="align-items:flex-start; gap:8px;">
+        <select id="lm_roles" multiple size="8" style="min-width:160px; max-width:100%;"></="">
+        </select>
+        <div class="col" style="display:flex; flex-direction:column; gap:6px;">
+          <button id="lm_roles_all" class="chip" type="button" style="min-height:26px;padding:4px 8px;">Alle</button>
+          <button id="lm_roles_none" class="chip" type="button" style="min-height:26px;padding:4px 8px;">Keine</button>
+        </div>
+      </div>
+      <div style="font-size:11px; opacity:.75;">Lernfunktionen (L2/L3) wirken nur bei ausgewählten Rollen. Ohne Auswahl: alle Rollen.</div>
+    </section>
+  </div>
+</aside>
+
+
+
+<script>
+(function(){
+  const $ = (id)=>document.getElementById(id);
+  const btn = $('lm_btn'), sb = $('lm_sidebar'), bd = $('lm_sidebar_backdrop'), close = $('lm_close');
+  const lmL = $('lm_L_chk'), lmAlpha = $('lm_alpha'), lmAlphaVal = $('lm_alpha_val');
+  const lmL2 = $('lm_L2_chk'), lmN = $('lm_n'), lmNVal = $('lm_n_val');
+
+  // originals
+  const L_chk = $('hr_enable');
+  const L_rng = $('hr_range');
+  const L2_chk = $('l2_enable');
+  const L2_rng = $('l2_step');
+
+  function openSB(){ sb.classList.add('open'); bd.style.display='block'; sb.setAttribute('aria-hidden','false'); }
+  function closeSB(){ sb.classList.remove('open'); bd.style.display='none'; sb.setAttribute('aria-hidden','true'); }
+
+  btn && btn.addEventListener('click', openSB);
+  close && close.addEventListener('click', closeSB);
+  bd && bd.addEventListener('click', closeSB);
+
+  // Init proxies from originals
+  function syncFromOriginals(){
+    if (L_chk) { lmL.checked = !!L_chk.checked; }
+    if (L_rng) { lmAlpha.value = L_rng.value || 85; lmAlphaVal.textContent = lmAlpha.value; }
+    if (L2_chk){ lmL2.checked = !!L2_chk.checked; }
+    if (L2_rng){ lmN.value = L2_rng.value || 3; lmNVal.textContent = lmN.value; }
+  }
+  document.addEventListener('DOMContentLoaded', syncFromOriginals);
+  setTimeout(syncFromOriginals, 0);
+
+  // Proxies drive originals
+  lmL && lmL.addEventListener('change', ()=>{
+    if (!L_chk) return;
+    L_chk.checked = lmL.checked;
+    L_chk.dispatchEvent(new Event('change', {bubbles:true}));
+  });
+  lmAlpha && lmAlpha.addEventListener('input', ()=>{
+    if (!L_rng) return;
+    L_rng.value = lmAlpha.value;
+    lmAlphaVal.textContent = lmAlpha.value;
+    L_rng.dispatchEvent(new Event('input', {bubbles:true}));
+  });
+  lmL2 && lmL2.addEventListener('change', ()=>{
+    if (!L2_chk) return;
+    L2_chk.checked = lmL2.checked;
+    L2_chk.dispatchEvent(new Event('change', {bubbles:true}));
+  });
+  lmN && lmN.addEventListener('input', ()=>{
+    if (!L2_rng) return;
+    L2_rng.value = lmN.value;
+    lmNVal.textContent = lmN.value;
+    L2_rng.dispatchEvent(new Event('input', {bubbles:true}));
+  });
+
+  // Also reflect originals back to proxies if they change elsewhere
+  L_chk && L_chk.addEventListener('change', ()=>{ lmL.checked = !!L_chk.checked; });
+  L_rng && L_rng.addEventListener('input', ()=>{ lmAlpha.value = L_rng.value||85; lmAlphaVal.textContent = lmAlpha.value; });
+  L2_chk && L2_chk.addEventListener('change', ()=>{ lmL2.checked = !!L2_chk.checked; });
+  L2_rng && L2_rng.addEventListener('input', ()=>{ lmN.value = L2_rng.value||3; lmNVal.textContent = lmN.value; });
+
+  // Keyboard: ESC to close
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeSB(); });
+})();
+</script>
+
+
+<script id="lm_toolbar_cleanup_js">
+(function(){
+  function isOnlyWhitespace(node){
+    if (!node) return false;
+    const txt = (node.textContent||'').replace(/\s+/g,'').trim();
+    // keine sichtbaren Kinder außer evtl. Kommentar/Whitespace
+    const hasVisibleChild = Array.from(node.children).some(el => getComputedStyle(el).display !== 'none');
+    return txt.length === 0 && !hasVisibleChild;
+  }
+  function hideEmptyChips(){
+    document.querySelectorAll('.controls .chip').forEach(ch=>{
+      if (isOnlyWhitespace(ch)) ch.style.display = 'none';
+    });
+    // Container, die den alten Regler beherbergen/ beherbergten
+    const old = document.querySelector('#hr_range');
+    if (old){
+      const parent = old.closest('.controls .chip, .controls div');
+      if (parent) parent.style.display = 'none';
+    }
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', hideEmptyChips);
+  } else {
+    hideEmptyChips();
+  }
+  // Auch nach einem Re-Render sicherstellen
+  if (typeof window.render === 'function' && !window.render.__lmCleanup){
+    const R = window.render;
+    window.render = function(){
+      const out = R.apply(this, arguments);
+      try{ hideEmptyChips(); }catch(_){}
+      return out;
+    };
+    window.render.__lmCleanup = true;
+  }
+})();
+</script>
+
+
+<script id="tk_l3_script">
+(function(){
+  const $ = (id)=>document.getElementById(id);
+  const l3Chk = $('lm_L3_chk');
+  const l3N   = $('lm_firstN');
+  const l3Val = $('lm_firstN_val');
+
+  // Persist
+  try{
+    const on = localStorage.getItem('tk.l3.on');
+    const n  = localStorage.getItem('tk.l3.n');
+    if (on !== null) { if (l3Chk) l3Chk.checked = (on === '1'); }
+    if (n  !== null && l3N){ l3N.value = String(Math.max(0, Math.min(20, +n))); }
+    if (l3Val && l3N) l3Val.textContent = l3N.value;
+  }catch(_){}
+
+  function saveL3(){
+    try{
+      localStorage.setItem('tk.l3.on', l3Chk && l3Chk.checked ? '1' : '0');
+      localStorage.setItem('tk.l3.n',  l3N ? String(l3N.value) : '3');
+    }catch(_){}
+  }
+
+  function getCurr(){
+    var n = document.getElementById('curr');
+    if (n) return n;
+    return document.querySelector('.cue.current, .cue--current, [data-current="true"]');
+  }
+
+  // Remove previous L3 masks
+  function l3Unmask(root){
+    if (!root) return;
+    root.querySelectorAll('.tk-mask-word-l3').forEach(sp => {
+      const orig = sp.getAttribute('data-orig') || sp.textContent;
+      sp.replaceWith(document.createTextNode(orig));
+    });
+  }
+
+  // Tokenizer (Unicode letters/digits with accents, hyphens, apostrophes)
+  const WORD_RE = /[\p{L}\p{M}\p{Nd}][\p{L}\p{M}\p{Nd}’'\-]*/u;
+  function tokenize(text){
+    const out = [];
+    let i = 0;
+    while (i < text.length){
+      const slice = text.slice(i);
+      const m = slice.match(WORD_RE);
+      if (m && m.index === 0){
+        out.push({type:'word', text:m[0]});
+        i += m[0].length;
+      } else {
+        out.push({type:'other', text:text[i]});
+        i += 1;
+      }
+    }
+    return out;
+  }
+
+  // Build masked fragment: keep first N words after speaker colon, mask the rest to "…"
+  function l3MaskTextNode(tn, visibleCount, speakerPassedRef, wordIdxRef){
+    const text = tn.nodeValue;
+    if (!text) return {frag:null};
+
+    const tokens = tokenize(text);
+    const frag = document.createDocumentFragment();
+
+    for (const tok of tokens){
+      if (tok.type === 'word'){
+        if (!speakerPassedRef.passed){
+          frag.appendChild(document.createTextNode(tok.text));
+        } else {
+          const idx = wordIdxRef.count + 1; // 1-based after colon
+          if (idx <= visibleCount){
+            frag.appendChild(document.createTextNode(tok.text));
+          } else {
+            const sp = document.createElement('span');
+            sp.className = 'tk-mask-word-l3';
+            sp.setAttribute('data-orig', tok.text);
+            sp.textContent = '…';
+            frag.appendChild(sp);
+          }
+          wordIdxRef.count++;
+        }
+      } else {
+        frag.appendChild(document.createTextNode(tok.text));
+        if (tok.text.indexOf(':') !== -1 && !speakerPassedRef.passed){
+          speakerPassedRef.passed = true;
+        }
+      }
+    }
+    return {frag};
+  }
+
+  function l3Apply(){
+    const curr = getCurr();
+    if (!curr) return;
+    const enabled = l3Chk && l3Chk.checked;
+    const visibleN = parseInt(l3N ? l3N.value : "3", 10) || 3;
+
+    // Always start by unmasking L3 to avoid nesting
+    l3Unmask(curr);
+    if (!enabled) return;
+
+    const walker = document.createTreeWalker(curr, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){
+        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        const p = n.parentElement;
+        if (!p) return NodeFilter.FILTER_REJECT;
+        const tag = p.tagName && p.tagName.toLowerCase();
+        if (tag === 'script' || tag === 'style') return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+
+    const speakerPassedRef = {passed:false};
+    const wordIdxRef = {count:0}; // counts after colon
+
+    for (const tn of nodes){
+      const {frag} = l3MaskTextNode(tn, visibleN, speakerPassedRef, wordIdxRef);
+      if (frag){
+        tn.parentNode.replaceChild(frag, tn);
+      }
+    }
+  }
+
+  // Wire UI
+  l3Chk && l3Chk.addEventListener('change', function(){
+    saveL3();
+    l3Apply();
+  });
+  l3N && l3N.addEventListener('input', function(){
+    if (l3Val) l3Val.textContent = l3N.value;
+    saveL3();
+    l3Apply();
+  });
+
+  // Hook into render()
+  if (typeof window.render === 'function' && !window.render.__tkL3){
+    const R = window.render;
+    window.render = function(){
+      const out = R.apply(this, arguments);
+      try{ l3Apply(); }catch(_){}
+      return out;
+    };
+    window.render.__tkL3 = true;
+  }
+
+  // Initial
+  document.addEventListener('DOMContentLoaded', function(){
+    if (l3Val && l3N) l3Val.textContent = l3N.value;
+    l3Apply();
+  });
+})();
+</script>
+<style id="tk_l3_css">
+.tk-mask-word-l3{ display:inline-block; min-width:0.6em; text-align:center; }
+</style>
+
+
+<script id="tk_remove_overlay_js">
+document.addEventListener('DOMContentLoaded', function(){
+  try{
+    var chk = document.getElementById('hr_enable');
+    if (chk){ chk.checked = false; chk.dispatchEvent(new Event('change', {bubbles:true})); }
+    var rng = document.getElementById('hr_range');
+    if (rng){ rng.value = 85; rng.dispatchEvent(new Event('input', {bubbles:true})); }
+  }catch(_){}
+});
+</script>
+
+
+<script id="tk_learn_roles_gate">
+(function(){
+  const $ = (id)=>document.getElementById(id);
+
+  // Build role list from existing UI or fallback
+  function collectRoles(){
+    const roles = new Set();
+    // Try selects with role options
+    document.querySelectorAll('select').forEach(sel=>{
+      Array.from(sel.options||[]).forEach(opt=>{
+        const t = (opt.textContent||'').trim();
+        if (t && t.length <= 30) roles.add(t);
+      });
+    });
+    // Fallback to fixed array if available
+    if (roles.size === 0 && Array.isArray(window.FIXED_ROLE_LABELS)){
+      window.FIXED_ROLE_LABELS.forEach(r => roles.add(r));
+    }
+    // Remove 'Alle' entry; not a real role
+    const arr = Array.from(roles).filter(n => n && n.toLowerCase() !== 'alle');
+    // Sort by locale
+    try { arr.sort((a,b)=>a.localeCompare(b,'de')); } catch(_){ arr.sort(); }
+    return arr;
+  }
+
+  function alias(x){
+    x = String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
+    if (x === 'die frauen') x = 'frauen';
+    x = x.replace(/kapitätn\./g,'kapitän').replace(/kapitän\./g,'kapitän');
+    return x;
+  }
+
+  function getSpeaker(){
+    const c = document.getElementById('curr') || document.querySelector('.cue.current, .cue--current, [data-current="true"]');
+    if (!c) return '';
+    // Try dedicated speaker node
+    const el = c.querySelector('.speaker, .rolle, .fig, .name, .character');
+    if (el && el.textContent) return el.textContent.trim();
+    // Fallback: first line before colon
+    const first = (c.textContent||'').trim().split(/\\n/)[0];
+    const m = first.match(/^([A-Za-zÄÖÜäöüß .\\-]{2,40}):/);
+    return m ? m[1] : '';
+  }
+
+  function loadSelected(){
+    try{
+      const raw = localStorage.getItem('tk.learn.roles');
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    }catch(_){ return []; }
+  }
+  function saveSelected(arr){
+    try{ localStorage.setItem('tk.learn.roles', JSON.stringify(arr||[])); }catch(_){}
+  }
+
+  function populate(){
+    const sel = $('lm_roles');
+    if (!sel) return;
+    const roles = collectRoles();
+    sel.innerHTML = '';
+    roles.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r; opt.textContent = r;
+      sel.appendChild(opt);
+    });
+    // Restore selection
+    const chosen = new Set(loadSelected().map(alias));
+    Array.from(sel.options).forEach(opt => {
+      if (chosen.has(alias(opt.textContent))) opt.selected = true;
+    });
+  }
+
+  function currentSelection(){
+    const sel = $('lm_roles');
+    if (!sel) return [];
+    return Array.from(sel.selectedOptions||[]).map(o => (o.textContent||o.value||'').trim()).filter(Boolean);
+  }
+
+  function eligible(){
+    const chosen = loadSelected();
+    if (!chosen || chosen.length === 0) return true; // no filter => all roles
+    const sp = alias(getSpeaker());
+    return chosen.map(alias).some(a => a === sp || sp.includes(a));
+  }
+
+  // Remove masks if ineligible (generic, independent of L2/L3 internals)
+  function unmaskAllInCurr(){
+    const curr = document.getElementById('curr') || document.querySelector('.cue.current, .cue--current, [data-current="true"]');
+    if (!curr) return;
+    // L2
+    curr.querySelectorAll('.tk-mask-word').forEach(sp=>{
+      const orig = sp.getAttribute('data-orig') || sp.textContent;
+      sp.replaceWith(document.createTextNode(orig));
+    });
+    // L3
+    curr.querySelectorAll('.tk-mask-word-l3').forEach(sp=>{
+      const orig = sp.getAttribute('data-orig') || sp.textContent;
+      sp.replaceWith(document.createTextNode(orig));
+    });
+  }
+
+  function enforce(){
+    if (eligible()){
+      // allow L2/L3 to do their work (they already run on render/slider changes)
+      return;
+    } else {
+      // strip any masks from this cue
+      unmaskAllInCurr();
+    }
+  }
+
+  // Wire sidebar UI
+  function bind(){
+    const sel = $('lm_roles');
+    const all = $('lm_roles_all');
+    const none= $('lm_roles_none');
+    sel && sel.addEventListener('change', ()=>{ 
+      saveSelected(currentSelection()); 
+      enforce(); 
+    });
+    all && all.addEventListener('click', ()=>{
+      const sel = $('lm_roles'); if (!sel) return;
+      Array.from(sel.options).forEach(o=>o.selected = true);
+      saveSelected(currentSelection()); enforce();
+    });
+    none && none.addEventListener('click', ()=>{
+      const sel = $('lm_roles'); if (!sel) return;
+      Array.from(sel.options).forEach(o=>o.selected = false);
+      saveSelected(currentSelection()); enforce();
+    });
+  }
+
+  // Hook into render so each dialog is checked
+  if (typeof window.render === 'function' && !window.render.__tkLearnRoles){
+    const R = window.render;
+    window.render = function(){
+      const out = R.apply(this, arguments);
+      try{ enforce(); }catch(_){}
+      return out;
+    };
+    window.render.__tkLearnRoles = true;
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    populate();
+    bind();
+    enforce();
+  });
+})();
+</script>
+
+
+<script id="tk_swipe_back">
+(function(){
+  // Simple, robust swipe-right => go back one dialog
+  let startX = null, startY = null, startT = 0, active = false;
+  const THRESHOLD = 50;   // px horizontal
+  const VERTICAL_MAX = 40; // px vertical tolerance
+  const TIME_MIN = 60;    // ms minimal gesture time
+
+  function onStart(x, y){
+    startX = x; startY = y; startT = performance.now(); active = true;
+  }
+  function onEnd(x, y){
+    if (!active) return;
+    active = false;
+    const dx = x - startX;
+    const dy = y - startY;
+    const dt = performance.now() - startT;
+    if (dt < TIME_MIN) return;                      // ignore taps
+    if (Math.abs(dx) < THRESHOLD) return;           // too short
+    if (Math.abs(dy) > VERTICAL_MAX) return;        // vertical swipe -> ignore
+    if (dx > 0) {
+      goPrev();
+    }
+  }
+
+  function goPrev(){
+    // Prefer explicit "Zurück" control if present
+    const btn = document.getElementById('prev')
+           || document.querySelector('[data-action="prev"], .btn-prev, button[title*="Zurück"], button[aria-label*="Zurück"]');
+    if (btn) { btn.click(); return; }
+    // Common functions
+    if (typeof window.prev === 'function') { window.prev(); return; }
+    if (typeof window.goPrev === 'function') { window.goPrev(); return; }
+    // Fallback: ArrowLeft
+    document.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowLeft'}));
+  }
+
+  // Touch events (passive to not block scrolling)
+  document.addEventListener('touchstart', function(ev){
+    if (!ev.touches || ev.touches.length !== 1) return;
+    const t = ev.touches[0];
+    onStart(t.clientX, t.clientY);
+  }, {passive:true});
+
+  document.addEventListener('touchend', function(ev){
+    try{
+      const t = (ev.changedTouches && ev.changedTouches[0]) ? ev.changedTouches[0] : null;
+      if (!t) return;
+      onEnd(t.clientX, t.clientY);
+    }catch(_){}
+  }, {passive:true});
+
+  // Pointer/mouse for desktop
+  let isPointerDown = false;
+  document.addEventListener('pointerdown', function(ev){
+    if (ev.pointerType === 'mouse' || ev.pointerType === 'touch' || ev.pointerType === 'pen'){
+      isPointerDown = true;
+      onStart(ev.clientX, ev.clientY);
+    }
+  }, {passive:true});
+  document.addEventListener('pointerup', function(ev){
+    if (!isPointerDown) return;
+    isPointerDown = false;
+    onEnd(ev.clientX, ev.clientY);
+  }, {passive:true});
+
+})();
+</script>
+
+</body>
+</html>
