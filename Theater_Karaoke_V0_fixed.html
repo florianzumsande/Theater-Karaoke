@@ -1,0 +1,2881 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Karaoke v18p • Fixe Rollenfilter</title>
+<style>
+  :root { --scale: 1.0; --autoScale: 1.0; --bg:#0b1220; --fg:#e5e7eb; --card:#0f172a; --border:#1f2a44; --muted:#94a3b8; --fill:#facc15; --cueColor:#ffffff; }
+  html,body { height:100%; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial, sans-serif; background:var(--bg); color:var(--fg); }
+  header { position: sticky; top:0; background:var(--bg); padding:12px; border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:center; z-index:10; }
+  h1 { font-size:16px; margin:0; font-weight:800; }
+  .badge { background:#1f2a44; color:#e5e7eb; padding:4px 10px; border-radius:999px; font-size:12px; }
+  #sizeSlider { width:40vw; max-width:240px; }
+  main { max-width: 900px; margin: 10px auto calc(84px + env(safe-area-inset-bottom)); padding: 0 12px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:12px; margin-bottom:12px; }
+  #viewport { min-height:58dvh; max-height: calc(100dvh - 180px); overflow-y:auto; display:flex; flex-direction:column; gap:16px; }
+  body.focus #viewport { max-height: calc(100dvh - 24px); }
+  #viewport article { overflow-wrap:anywhere; word-break:normal; }
+
+  .cue-current { font-size: calc(var(--scale) * var(--autoScale) * 2.1rem); font-weight: 800; line-height:1.28; color: var(--cueColor); word-break: keep-all; overflow-wrap: break-word; hyphens: none; }
+  @media (max-width: 600px){ .cue-current { font-size: calc(var(--scale) * var(--autoScale) * 1.6rem); } }
+  .cue-near { font-size: calc(var(--scale) * 1.05rem); opacity:.85; }
+  .speaker { color:var(--fill); font-weight:900; }
+
+  .toolbar { position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--border); padding:10px 12px calc(12px + env(safe-area-inset-bottom)); display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  button { min-height:54px; border-radius:14px; font-weight:800; font-size:16px; border:1px solid var(--border); background:#0b1629; color:#e5e7eb; -webkit-tap-highlight-color: transparent; }
+  button.primary { background:var(--fill); color:#111827; border-color:var(--fill); }
+  .hud { color:var(--muted); font-size:12px; }
+  .controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-left:auto; }
+  .chip { border:1px solid var(--border); border-radius:999px; padding:8px 12px; font-size:14px; background:transparent; }
+  .panel { display:none; }
+  .panel.open { display:block; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input[type="search"] { height:42px; border-radius:12px; border:1px solid var(--border); background:transparent; color:var(--fg); padding:0 12px; font-size:16px; }
+  .list { display:grid; gap:8px; margin-top:8px; }
+  .item { display:flex; align-items:center; justify-content:space-between; gap:8px; border:1px solid var(--border); border-radius:12px; padding:8px 12px; }
+  .small { font-size:13px; color:var(--muted); }
+  .btn-mini { min-height:38px; font-size:14px; padding:0 12px; border-radius:10px; }
+
+  /* Progressive fill */
+  .chars .c { opacity:.26; transition:opacity .06s linear, color .06s linear; }
+  .cue-current .chars .c { color: var(--cueColor); opacity:1; }
+  .cue-current .chars .c.filled { color: var(--fill); opacity:1; }
+
+  /* Focus mode */
+  body.focus header, body.focus .toolbar, body.focus .panel { display:none !important; }
+  #focusFloat { position: fixed; top: 10px; right: 10px; z-index: 9999; background: rgba(250,250,250,.15); border: 1px solid rgba(255,255,255,.3); color:#facc15; font-size: 22px; border-radius: 50%; width: 52px; height: 52px; display:flex; align-items:center; justify-content:center; backdrop-filter: blur(8px); }
+  body:not(.focus) #focusFloat { display:none; }
+
+  /* Stage directions */
+  .stageDir { color:#9ca3af; font-style: italic; }
+  body.hideDirs .stageDir { display:none; }
+
+/* [FAV v2] styles & legacy hide */
+#favPanel{ max-height: 40vh; overflow:auto; }
+#favList .favItem{ display:flex; align-items:center; gap:.5rem; }
+#favList .favJump{ flex:1; text-align:left; }
+#favList .favDel{ opacity:.8; }
+#btnFavToggle[aria-pressed="true"]{ font-weight:700; }
+
+/* Hide legacy bottom mark UI safely (no DOM deletion) */
+#btnAddMark, #btnClearMarks, #markList, #markGroup { display: none !important; }
+
+
+/* [FavNav v4] bottom-left bar */
+.favNavBar{
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  opacity: 0.85;
+}
+.favNavBtn{
+  padding: .3rem .5rem;
+  border: 1px solid #666;
+  background: rgba(255,255,255,0.08);
+  color: #ccc;
+  font-size: .9rem;
+  border-radius: .3rem;
+}
+.favNavBtn:hover{ opacity: 1; }
+.favStickyMirror{
+  padding: .4rem .6rem;
+  border-radius: .4rem;
+  border: 1px solid #666;
+  background: rgba(255,255,255,0.1);
+  color: #ccc;
+  font-size: .9rem;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+.favStickyMirror:hover{ opacity: 1; }
+.favStickyMirror[aria-pressed="true"]{
+  font-weight: 700;
+  background: rgba(255,255,200,0.15);
+  color: #fff480;
+}
+
+
+/* [FavLoop v7] checkbox styling */
+.favLoopLabel{
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .2rem .35rem;
+  border: 1px solid #666;
+  border-radius: .3rem;
+  background: rgba(255,255,255,0.08);
+  color: #ccc;
+  font-size: .9rem;
+  opacity: 0.85;
+}
+.favLoopLabel input{ transform: scale(1.1); }
+
+
+/* [Safe Hide] hide and disable the dialog "Weiter" button at bottom right */
+#btnNext {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+
+/* [Toolbar V3 Full Horizontal] */
+header, #toolbar, .controls {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+header .controls {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  align-items: center;
+  gap: .4rem;
+}
+
+header button, header .chip, .controls button {
+  flex: 1 1 10%;
+  min-width: 90px;
+  max-width: 160px;
+  text-align: center;
+  padding: .5rem .6rem;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #666;
+  border-radius: .4rem;
+  color: #ccc;
+  font-size: .95rem;
+}
+
+header button:hover, header .chip:hover, .controls button:hover {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+
+/* Remove unintended left padding/margins that waste horizontal space */
+header .wrap, header .container, header .inner {
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  width: 100% !important;
+}
+
+
+/* [Top Info Bar] small line above toolbar */
+#topInfoBar{
+  width: 100%;
+  text-align: center;
+  font-size: .85rem;
+  color: #ccc;
+  margin: .3rem 0 .4rem 0;
+  letter-spacing: .2px;
+}
+#topInfoBar .version{ font-weight: 600; color: #ddd; }
+#topInfoBar .dialogCount{ color: #9cc3ff; }
+
+
+/* [V5] Move count to top bar; hide old badge in header */
+header #badge { display: none !important; }
+
+
+/* [V5] Ensure toolbar controls use full width */
+header .controls {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  gap: .4rem;
+}
+
+
+/* [V6] Smaller toolbar buttons */
+header button, header .chip, .controls button {
+  flex: 1 1 10%;
+  min-width: 80px;
+  max-width: 140px;
+  text-align: center;
+  margin: 0.1rem;
+  padding: .25rem .4rem;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #666;
+  border-radius: .35rem;
+  color: #ccc;
+  font-size: .8rem;
+}
+
+header button:hover, header .chip:hover, .controls button:hover {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+
+
+/* [V7] Compact toolbar buttons (half click area) */
+header button, header .chip, .controls button {
+  flex: 1 1 10%;
+  min-width: 60px;
+  max-width: 120px;
+  text-align: center;
+  margin: 0.05rem;
+  padding: .15rem .25rem;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #666;
+  border-radius: .3rem;
+  color: #ccc;
+  font-size: .75rem;
+  line-height: 1.1;
+}
+
+header button:hover, header .chip:hover, .controls button:hover {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+/* Slightly reduce gaps between buttons */
+header .controls {
+  gap: .25rem !important;
+  justify-content: space-evenly;
+}
+
+
+/* [V8] Hide top "Merken" button (btnFavToggle) from toolbar */
+#btnFavToggle {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+
+/* [V9] Stack size and tempo vertically */
+#sizeTempoGroup{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .2rem;
+}
+#sizeTempoGroup label{ font-size: .85rem; color: #ccc; }
+#sizeTempoGroup input[type="range"]{ width: 160px; }
+
+
+/* [V10] Ensure button text stays inside buttons */
+header button, .controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  max-width: 150px;
+  padding: .2rem .35rem;
+  font-size: .78rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chips that act like buttons should behave similarly */
+header .chip:not(label.chip), .controls .chip:not(label.chip) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  max-width: 150px;
+  padding: .2rem .35rem;
+  font-size: .78rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Label chips with inputs (e.g., Tempo) must not clip the slider */
+label.chip {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: unset;
+}
+label.chip input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 120px;
+  max-width: 30vw;
+}
+
+/* Size/Tempo stacked group tweaks so labels don't wrap oddly */
+#sizeTempoGroup label {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+}
+#sizeTempoGroup input[type="range"] {
+  width: 180px;
+  max-width: 40vw;
+}
+
+
+/* [V11] Move 'Tempo' label above its slider */
+#sizeTempoGroup label.chip {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 0.15rem !important;
+}
+#sizeTempoGroup label.chip input[type="range"] {
+  width: 180px;
+  max-width: 40vw;
+}
+
+
+/* [V12] Remove button-style background from Tempo slider */
+#sizeTempoGroup label.chip {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+#sizeTempoGroup label.chip:hover {
+  background: none !important;
+  color: inherit !important;
+}
+
+
+/* [V13] Hide bottom-left "Zurück" button */
+#btnPrev {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+</style>
+<style id="blueclick-css">
+button:active,
+input[type=range]:active,
+select:active {
+  background-color: #2196f3 !important;
+  color: #fff !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+button.clicked,
+input[type=range].clicked,
+select.clicked {
+  background-color: #2196f3 !important;
+  color: #fff !important;
+}
+button,
+input[type=range],
+select {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+</style>
+
+
+<style id="speaker-blue">
+.speaker { color: #2196f3; font-weight: bold; }
+</style>
+
+</head>
+
+<div id="topInfoBar">
+  🎤 <span class="version" id="infoVersion">Karaoke v18p</span> • <span class="dialogCount" id="infoCount">– Dialoge</span>
+</div>
+
+
+<div id="favNavBar" class="favNavBar" aria-label="Favoriten Navigation">
+  <button id="btnFavPrev" class="favNavBtn" title="Vorheriger Favorit">◀</button>
+  <button id="btnFavSticky" class="favStickyMirror" aria-pressed="false" title="Aktuellen Dialog merken (F)">☆ Merken</button>
+  <button id="btnFavNext" class="favNavBtn" title="Nächster Favorit">▶</button>
+  <button id="btnFavAuto" class="favNavBtn" title="Favoriten automatisch durchlaufen">Auto</button>
+  <label id="favLoopLabel" class="favLoopLabel" title="Dauerschleife">
+    <input type="checkbox" id="chkFavLoop"> 🔁
+  </label>
+</div>
+
+  <header>
+    <span id="badge" class="badge" aria-live="polite">0 Dialoge</span>
+    <div class="controls">
+      <div id="sizeTempoGroup"><label style="font-size:13px;">Größe <span id="szVal">1×</span></label>
+<input id="sizeSlider" type="range" min="0.8" max="2.6" step="0.05" value="1" aria-label="Textgröße"/>
+<label class="chip">Tempo <input id="playMs" type="range" min="600" max="12000" step="100" value="3000" style="width:36vw;max-width:240px;margin-left:6px;" aria-label="Autoplay Tempo"></label></div>
+      <button id="btnToc" class="chip">Akt/Szene</button>
+      <button id="btnFavToggle" class="chip" aria-pressed="false" title="Aktuellen Dialog merken/entmerken (F)">☆ Merken</button>
+      <button id="btnFavs" class="chip">⭐ Favoriten</button>
+      <button id="btnPlay" class="chip">▶︎ Auto</button>
+      
+      <label class="chip"><input id="loop" type="checkbox" checked style="margin-right:6px;">Loop</label>
+      <button id="btnSearch" class="chip">Suche</button>
+      <button id="btnRoles" class="chip">🎭 Filter</button>
+      <button id="btnStage" class="chip">🎬 Regie</button>
+      <button id="btnTheme" class="chip" title="Theme wechseln">🌙</button>
+      <button id="btnFocus" class="chip" title="Fokusmodus">🪄</button>
+    </div>
+  </header><main>
+    <div class="card">
+      <div class="hud" id="hud">—</div>
+
+      <div id="toc" class="panel" aria-label="Inhaltsverzeichnis"></div>
+
+      
+<div id="favPanel" class="panel" aria-label="Favoriten">
+  <div class="row" style="justify-content:space-between; align-items:center;">
+    <div class="small" id="favCount">—</div>
+    <div>
+      <button id="btnFavClear" class="btn-mini" title="Alle Favoriten löschen">Alle löschen</button>
+      <button id="btnFavClose" class="btn-mini" title="Schließen">Schließen</button>
+    </div>
+  </div>
+  <div id="favList" class="col gap-s"></div>
+</div>
+<div id="searchPanel" class="panel" aria-label="Suche">
+        <div class="row">
+          <input id="q" type="search" placeholder="z.B. Hinnerk, Kapitän, Moin…" style="flex:1;" inputmode="search">
+          <button id="btnFind" class="btn-mini">Finden</button>
+          <button id="btnPrevHit" class="btn-mini" aria-label="Vorheriger Treffer">⟨</button>
+          <button id="btnNextHit" class="btn-mini" aria-label="Nächster Treffer">⟩</button>
+          <span class="small" id="hitInfo">0 Treffer</span>
+        </div>
+        <div id="hitList" class="list"></div>
+      </div>
+
+      <div id="rolesPanel" class="panel" aria-label="Dialogfilter">
+        <div class="small" style="margin-bottom:8px;">Feste Auswahl — Navigation/Auto zeigt nur diese Dialoge (+ 1 Kontext).</div>
+        <div id="rolesList" class="list"></div>
+        <div class="row">
+          <button id="rolesClear" class="btn-mini">Alles löschen</button>
+          <button id="rolesAll" class="btn-mini">Alle wählen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="viewport" class="card" role="region" aria-live="polite">
+      <article id="prev" class="cue-near"></article>
+      <article id="curr" class="cue-current"></article>
+      <article id="next" class="cue-near"></article>
+    </div>
+  </main>
+
+  <div class="toolbar">
+    <button id="btnPrev">⟨ Zurück</button>
+    <button id="btnNext" class="primary">Weiter ⏩</button>
+  </div>
+
+  <textarea id="playtext" style="display:none;">﻿1.	Akt
+(Vorhang geht auf, Kapitän Struvenhus betritt die Bühne)
+
+ 1.	Szene 
+Kapitän
+Kapitän: 	
+
+Moin leive Lüe, min Noam is Peter Struvenhus, un ik  bün jaun Kapitän up düsse Krüzfoahrt. Wi 
+fangt futt mit dat Boarding an, un ik frei mi nu all heller dorup, jau all an Boord van use MS 
+Rosta willkommen to heet'n.
+
+Wi steekt vandoage vun Savona in Italien ut to See un moakt us op groode Foahrt bis noa 
+Marseille. Van dor ut geiht dat wider noa Barcelona, Palma de Mallorca, Palermo un bevör wi 
+weer in Savona ankoamt , moakt wi noch en Halt in de ewige Stadt Rom met Besoek van´n 
+Petersdom in Vatikanstadt .
+
+Een poar Soaken noch tau use moie Krüzfoartschipp. De MS Rosta haff 14 Decks met toasamen 
+2.000 Kojen. Ik un min Personal warrt jo gern rund um de Uhr mit'n fein utgeklügeltet Boord-
+Programm, lekker Spiesen, Sport un noch vööl mehr verwöhnen. 
+As Hööpunkt will ick jau use Drag-Queens-Musical und Dance-Performance ganz besünners an't 
+Hatte leggen. Dat Team is över ale Landesgrenzen rut för ehre spektakuläre Show bekannt - dat 
+mö ji unbedingt sehn!
+Jau Hauptgepäck is al an Boord, ick bidd jo bitte noch sitten to blieven, bis dat i taun Boarding 
+uprooapen wörrt. För van oabend hebben wi al den ersten  Hööpunkt in't Programm: dat 
+Kapitänsdinner! Ick frei mi heller up düssen moien oabend toasamen met jau aale.
+Bist dorhenn wünsch ick us ale ene gode Foart mit alltied een Handbreit Water ünner'n Kiel - 
+ahoi! 
+(Geht ab)
+
+Hochdeutsche Variante:
+Guten Tag, meine sehr verehrten Passagiere. Mein Name ist Florian Struveneisen und ich bin 
+der Kapitän Ihres Schiffes. Wir werden alsbald mit dem Boarding beginnen und ich freue mich 
+schon sie alle an Bord unsrer MS Rosta begrüßen zu dürfen. Wir stechen heute von Savona in 
+Italien aus in See und gehen auf große Fahrt Richtung Marseille. Von dort aus geht es weiter 
+nach Barcelona, Palma de Mallorca, Palermo und bevor wir dann wider in Savona eintreffen, 
+machen wir noch Halt in der ewigen Stadt Rom. Die MS Rosta hat insgesamt 14 Deck und wir 
+werden sie rund um die Uhr mit einem ausgefeilten Bord-Programm, tollen Speisen, Sport-
+Programmen und noch vielem mehr verwöhnen. Als Highlight möchte ich ihnen unsere 
+Travestie-Modenschau wärmstens empfehlen. Das Team ist über alle Landesgrenzen hinaus 
+für die spektakuläre Show berühmt, das dürfen sie auf kienen Fall verpassen! Ihr 
+Hauptgepäck befindet sich bereits an Bord, ich bitte sie noch sitzen zu bleiben, bis der Aufruf 
+zum Boarding erfolgt. Für heute Abend haben wir bereits ein echtes Highlight auf dem 
+Tagesprogramm: Das Kapitänsdinner! Ich freue mich schon auf Sie! Bis dahin wünsche ich uns 
+allen eine gute Fahrt mit immer einer handbreit Wasser unter dem Kiel - ahoi! (geht ab)
+(Der Vorhang geht auf, in der Mitte eine Schifsftür als Requisite, der Rest der 
+Bühne ist abgehangen. Die folgende erste Szene spielt im Zuschauerraum und 
+vor der Schiffstür.
+Die drei Paare kommen von hinten rein. Die drei Frauen nehmen ihre Männer 
+an der Hand und laufen nacheinander los durchs Publikumm Richtung Bühne)
+2.	Szene
+Toni, Gretchen, Hinnerk, Lieschen, Willi, Mäggie
+Gretchen:	Toni, Toni!!! Nu kumm al, beiehl di n bittken! Ik wull up alle Fälle as erste up 
+dat Böötchen wähn! Du büst vandoage awer ok weer n Troantüte.
+
+Toni:	Gretchen, segg moal, hest du wat an diene Lauscher oder wat? Taun 1. haff 
+der Käpt´n vörhen seggt wi schöllt wachten bis dat wir uproopt wördt und 
+Taun 2.: "Dat hier is kieeen Bööööööötchen.... Dat hier is n Schipp. Nu wees 
+doch moal n bittken sinniger.
+Gretchen:	Schipp oder Böötchen, na dat is mi doch moal schietegoal, giff moal n bittken 
+GAS, ik will de erste wän de hier siene  Feute upt Böötchen sett !!!
+Toni:	(sauer) Schipp - Verdamminomoal.... DAT IS N SCHIPP! Up dit Schipp goaht 
+6.000 Lüe. Doar past heel Lehe mit drop .... Un Neeleihe noch dortau.
+
+Gretchen:	Nu hör mi awer moal blos up, dat was ja moal so moie, wi ut Leie tausoamen 
+mit heel Neeleeie up een Böötchen, dat end in Chaos; dat geiht ja noit nicht 
+gaut. Ne ne, de Neeleier loat man in Schlauchbott achteran paddeln.
+Toni:	Joa man Gretchen, ik wull dormit doch blots seggen, dütt Schipp ist 
+riesengroot. Un sowiso hebbt wi doch use Zimmer al reserveert. Du bruukst 
+also nich as erste rinloapen, du verpasst doar goar nix!
+Gretchen:	Ja-haaaa dat seggst du nu so! Man noasen is use Zimmer up düt Böötchen in 
+Keller ... und dann...? Ik will al wat seen un beleven, un vör allen no buten 
+kieken könen! 
+
+Toni:	Gretchen...  ein Schipp haff kien Keller! Un nu treck mi doch nich de heele Tied  
+	so... ik bün doch kien D-Zug...
+
+Gretchen:	...doch du büst n D-Zug... letzte Tied moal weer mit de Boahn föhrt.... Un nu 
+kumm Tonichen, nu kumm doch bitte! Weest du, ik möchte noasen biet 
+Vesper unbedingt direkt an de Siete van den Kapt´n sitten goan!
+Toni:	Vesper ... Ik  geev et up! (Toni und Gretchen stehen am Bühnenrand und 
+warten auf die anderen. Gretchen versucht, die Tür zum Schiff zu öffnen)
+
+Mäggie:  	Tau Willi, nu kummm jetzt endlich. Kiek, die Gretchen an, de ist all weer mit 
+ehre nöse heel vörne an. Ik will awer as erste up dat Boot!
+Willi:	Also Mäggie, ik weet joa ok nicht, wenn ik mi dat Schiff so bekieken dau, doar 
+wörd mi al weer direkt n bittken wat komisch tomöt. Ik glöv mi wörd heller 
+schwindelig... un heet.... un kolt ... un...
+Mäggie: 	...Ach wat nu hör awer moal up mit dien Gejösel. Wees doch nich al weer son 
+Waschlappen!
+Willi:	Ja nu bekiek die doch moal woar dat schaukeln deit! Mi wörd nu al heel 
+komisch in Lief. Dat dreiht sük alles.
+
+Mäggie: 	Dat dreihen kummmt seker nicht vant Schipp, dat kummmt van de 3 Brötchen 
+mit Zwibelmett up Leverwoast van vonmörgen, de du futterst hest.... Dor mutt 
+man jo "Rennerei" bi kriegen.
+Willi:	Mäggie nu ünnerschätz  nich so een  so een smeedig mörgen...
+
+Mäggie:  	Willi! Dat will ik nu nich al weer hören. Boven dat  hebben wi to huus  joa al 
+vörübt vör use Krüzfoart. Dat was doch n goade Idee dat wi us dat Waterbett 
+koopt hebbt. Dormit schaukelte dat nachts al moi und du kunnst di doar al an 
+gewöhnen.
+
+Willi:	Joa, gewöhnen... woar denn an? An de Innoame van Reisetabletten jeden 
+Oabend vört tau Bedde goan? Oder doran dat jede nacht een Tsunami öwert 
+Berre kummmt wenn du die dreiht hest? De ersten dreei Nächte bün ik dorbi 
+direkt moal över Bord goan. Man vör die is dat joa allens kien Problem, du 
+hest diene Rettungsringe joa ümmer bi di...(lacht)
+Mäggie:  	Findst dat nu witzig oder wat? Häh? Willi? Pass op min leeve Kerl. So un nu giv 
+moal weer n bitten Gas, ik möchte noasen biet Käptn´s Dinner unbedingt 
+direkt an de Siete van Käpt´n sitten goan!
+
+Willi:	(versöhnlich/reumütig) Awer Mäggie, bün ik nicht mehr dien Käpt´n?
+Mäggie:  	(lacht) Käptn, ach Fränzlein, min lüttken Käpt´n Blaubär... du wördest di joa 
+ohne dien Quietscheentchen sümst noch in de  Badewanne verföhren! (stellen 
+sich hinter Toni und Gretchen, Mäggie drängelt sich vor Toni)
+
+Lieschen:	Hinnerk, nu beiel di doch moal! Ik will nich all weer de letzte wäen! De 
+Gretchen und de Mäggie bünt all heel vörne. Un ik  dackel blot achteran, weil 
+du so´n Schloapmütze bist!
+Hinnerk:	Lieschen, nu wachte doch! Kiek di doch moal um, de anneren sitt doch hier ok 
+noch aale heel brav up ehre Stöhle und wachtet up dat Boarding. (zeigt ins 
+Publikumm) Wat moakst du hier so vörn Stress? 
+
+Lieschen:	Weil IK vanoavendd direkt kägen den Herr Kapitän Struvenhus sitten will. Loat 
+de man aale hier ruhig sitten blieven, fallt mi tau. Well toerst doar is moalt 
+toerst. un ik moal up jeden Fall as erste vandoage!
+
+Hinnerk:	Lieschen, Menschenskinner! Dat is mi nu echt pienlich! De kiekt uns alle heel 
+dösig an dor achtern. De proat sogoar över us. Kumm loat us lever sitten 
+goan... 
+
+Lieschen:	Nen Scheiß werd ik daun un mit hier nu hinsetten. Un sowiso, wenn hier eene 
+pienlich is, dann büst du dat! Kiek die doch moal an... musst du jedet moal 
+dien dösigen Knax-Brustbüddel um dien Nacken trekken? Wenn ik denn moal 
+to packen krieg schmiet ik üm wech. 
+Hinnerk:	(wütend) Dat kannst du ja moal utprobeeren, Wehe! Den hebb ik geschenkt 
+krägen as ik 12 was. De is also noch noagelneei. Un du weest genau wo 
+gefaahrlich dat överall int Utland is, oder? Düssen Büddel erfüllt höchste 
+Sicherheits-Standards. 
+Lieschen:	Hinnerk, den hest du fleeten Weeke ok antrokken as du to´n Bäcker no Neeleeie 
+büst weil use Schmitz dicht haar. 
+Hinnerk:	Joa wat denn... Utland... 
+
+Lieschen:	Gretchen! Mäggie! Is denn al oapen?
+
+Gretchen:	Nee, is noch dicht, ik hebb all allens probeert, geiht nicht oapen.
+
+Toni:	Probeert? Du hest bold den Griff offreeten!
+
+Mäggie:	Also dat is aver ok nicht to begriepen, dat man us hier ok einfach so stoan lett!
+Willi:	 Joa gaud, dor achtern bünt jo ok noch n poar Stöhle frei woar wi sitten goan     
+könnt... 
+
+Mäggie:   Ha! Dröm wider ... hier bliev ik stoahn bis dat Schapp upgaiht! Un wenn dat hier 
+blots eeine  versöch an mi vörbi tokoamen, dann föhr ik min Ellenbogen aver 
+sowat van rut...	
+
+Lieschen:	Laot mi moal vör (Ellenbogen - AUA), ik will doch blot kött dör dat Slödellock 
+kieken.  (tut es) Mist, ik kann nix seihn, gor nix. Schöllt wi vielleicht moal 
+Räuberlädder moaken, viellicht könnt wi doar boben dör dat Bullauge 
+rinkieken? 
+	(Die Frauen probieren eine Räuberleiter, oder eine Pyramide o. andere Figur 
+zum hochkommen)
+Hinnerk:		Segg moal Lieschen, hest du vörhen to lang in de Sünne stoahn oder wat? Nu  
+moak doch moal endlich n Bült sinniger. 
+
+Toni:	Also i drei benähmt jau joa as son poar Furien! Viellicht könnt I all dreie nu 
+moal langsamer wähn, wi wörd wall alle noch up dat Schipp koamen! 
+
+Willi:	Genau! Wi hebbt doch Urlaub! Ik vör min Deel bün joa all heller entspannt 
+und loat dat nu moal fein sinnig angoahn, un dat wör ik jau Fraulüüe nu ok 
+moal empfehlen! 
+	(Die Frauen hören mit überkreuzten Armen zu, drehen sich dann urplötzlich um 
+Richtung Schiff und klopfen an eine Türe oder zetern laut)
+Frauen:	Hallo!!! Heeeee!!! Wann geiht hier denn nur endlich oapen? Wann dürt wi 
+up´t Schipp? Wann dürt wi rinkoamen? Hallooooo? Hallöööööchen? 
+Mohooinnnn? Aloha? Ahoi? 
+(es kommt ein Gong, dann eine Durchsage vom Kapitän Struvenhus)
+
+Kapitän.: 	Aufgrund erheblicher Turbulenzen menschlicher Natur haben wir uns zu Ihrer 
+aller, und unserer Sicherheit dazu entschlossen das Boarding etwas 
+vorzuziehen. Wir öffnen nun die Tore und heißen sie willkommen auf unserer 
+MS Rosta!
+
+(Hier kann ein Statist, z.B. einfacher Matrose, von außen oder innen kommen und die Tür 
+öffnen. Frauen jubeln und stürmen hinein, Männer schütteln den Kopf und laufen peinlich 
+berührt hinterher.)
+
+-	Vorhang
+-	Musikienspieler von "Traumschiff"? 
+-	Schneller Bühnenbild Umbau
+-	Vorhang
+
+
+
+Frauen sind zunächst nicht zu sehen, Männer kommen  von links auf die Bühne und stellen sich 
+dann vorne an die Reling, sie können sich auch auf zwei Ebenen verteilen um die Bühne 
+auszunutzen)
+
+     3.	Szene 
+Toni, Hinnerk, Willi
+Toni:  Min leeve Herrgott, is dat n grootet Schipp. Düsse veelen Decks kunn ik to letzte goar 
+nicht mehr telln! (Die Männer sind schwer beeindruckt)
+
+Willi:	Ik haar blos regestreert dat wi ergendwoar tüschken Deck 5 und 7 use 
+FRAULÜÜE verloren hebben.  Harriejasses, de Wiever bünt ja total dördreiht! 
+Min Mäggie haff al bit vörbiloapen an' Pool ehren ersten Striet wegen eenen 
+Liegestauhl anfungen. 
+Hinnerk:    Un Lieschen haff sük den ersten Matrose an Hals ranschmeeten, weil se docht 
+haff dat ist de Kapitän Struvenhus. Dann froagt se üm ok noch: (äfft nach) Oh 
+Käptn, min Käptn dür ik vanoavendd bi´t Oabenddeeten nicht direkt neven di 
+sitten goan. Un als de oarme Kerl dann segg haar, dat he man blot n normaale 
+Matrose is, haff se üm an Schienbeen träten und faucht he schüll ehr utn Wech 
+goan! Also ik kenn min Lieschen so joa goar nich.
+ 
+Toni:    	Op alle Fäll hebbt wi de Schlödels för de Kabinen kregen... und wi bünt nu up´t 
+rechte Deck... Sonnendeck Nr. 14... heller boven mit de moiste Utsicht up´t 
+oapene Meer ... eene Getränkebar direkt vör use Kabinen... un ... direkt unner 
+us is dat Pooldeck ... weet ji wat dat heet ... beste Blick up Frischfleeischk...nu 
+kiekt doch moal ... oh neee... is dat? Dat is nu nich woahr ne... seggt moal ist da 
+Gretchen doar unnen?
+
+Willi:	Wecke menst du? De de sick dor nettegroad vör de Roothoarige breeit moakt 
+as n Pannkauken? Is dat Gretchen? Segg moal wat haff dej joa n roden Kopp?  
+So lang kann se joa noch goar inne Sünne stoan hebben.
+
+Toni:   	Ne, ne, dat is kien Sünnenbrand, de is up 180! Dat seh ik sogoar van hier 
+boaben. Ik froag mi blot worüm? 
+Hinnerk:  	Oh wachte...wachte... nu wörd dat spannend. Nu kummt ehr Finger dortau 
+(zeigt es wi Gretchen es macht) ...  moakt dormit kreise inne luft, nur word de 
+Kreise grötter und grötter... un geiht över in wildet gestikuleren... oh neeeee .... 
+Au, au nu haff Gretchen de Roothoarige schubst...
+Willi:	Ah, ah ik weet worüm dat dor geiht! Üm de Kabinen. Gretchen denkt glöv ik, 
+dat dat ehr Kabine is doar unnen. (er spitzt die Ohren)  Weest moal alle heel 
+still, viellicht könnt wi wat mitkriegen woröver de proatet... Du blöde Kuh, du 
+blöde, das is min Kabine, loat mit dor nu dör anners schmiet ik die bisiete.
+
+Toni:	Nu langt da aver ... (ruft runter) Gretchen! Gretchen! Du büst up´t falsche Deck, ji 
+mööt hier no us noar boven koamen!
+
+Hinnerk+
+Willi:	AUUUUUUU!!!
+
+Hinnerk:  	Toni, du harst Gretchen nicht offlenken dürt,  dat haff de rothoarige futt utnutzt 
+un Gretchen rückwärts över die Poolliege schmeten!
+Willi:	Awer Hallo! Dor ligg se!  As n Maikäfer up´n Rüggen!
+
+
+Toni:   	Harrjiasses, dor fangt us Urlaub ja futt gaud an, un well mutt dat noasen weer 
+büßen! (er ruft zuckersüß runter) Gretchen, min Leeve Gretchen, kumm fix noa 
+mi noar boaben! Ik haff us Kabine al funnen und haff al anfangen mit´t inrümen. 
+
+Hinnerk:  	So Männer, nu awer fix ... bevör de dreie boaben bünt möt wi seehn dat wi 
+Land gewinnt. (jeder geht in ein Zimmer).
+
+(Bühne ist kurz leer und dann kommen die Frauen rein. Mäggie und Lieschen 
+stützen Gretchen, diese humpelt, ist verstrubbelt, Sonnenbrille verrutscht)
+       4.	Szene 
+Mäggie, Lieschen, Gretchen
+
+Lieschen:	So Gretchen, sachte, sachte, Schritt vör Schritt. Geiht weer beter?
+
+Gretchen:	Aua, aua, aua - mi deit allet seehr! So'n blööde Hex! Ik bün mit vull karacho op 
+min Steesbeen fallen. Un nu? Wo schöll  ik denn bi dat Kapitäns-Dinner noch 
+eene gaude Figur moaken, wenn ik fast nich sitten kann?
+Mäggie:  So'n unverschammtet Wif! Awer hest dat seehn? Ik haff dorför ehren Ollen in'n 
+Pool schmeten.
+Lieschen:  	Un ik ehre Handtaschke achteran. Dor kiek, dor kannst du di erstmoal n bittken 
+an de Reeling fastehoalen. 
+
+Gretchen:	Ach, danke ok - ji twee bünd halt de besten Frünndinen, de een hebben kann. 
+Herrgott, man kann sik doch ok moal in'n Zimmer verdaun, oder nich? Un denn 
+will man dat Wicht höflich seggen, dat dat min Zimmer is - un wat moakt se? Se 
+schubst mi so mir nix, dir nix över de Pool-Liege dröver.
+
+Mäggie:	Kiek ... nu liggt se doar unnen! (ruft runter) Ja genau di meent wi! Du dösige 
+Hornochs! Brukts goar nicht so dösig hier rupkieken.
+
+Lieschen:  Leer man lever dat Water ut dien Handtaschk ut! Ik wull de doch blots mol kött 
+testen, of Gucci ok swimmen kann - aver diene Tasch haff den Test leider nich 
+bestoahn ...
+Mäggie:	Nu is die Gucci halt futschi! (alle drei lachen hämisch)
+
+Gretchen:	Ach nu geiht mit dat al vöhl beter. Min Knoaken bünt weer an  Ort und Stee und 
+bün nu blots noch heller gespannt up use Kabinen!
+
+(Türe geht auf, Toni kuckt heraus)
+ 
+
+5.	Szene
+Mäggie, Lieschen, Gretchen, Toni, Hinnerk, Willi
+
+Toni:    Ach Gretchen, moi dat du al dor büst. Min Söite segg moal, hest du ok min  
+Sünnenkräme inpackt? Nich dat an enne weer min Kopphaut ofpellt.
+
+Gretchen:	Seker, Toni! Blaaue Taschke unnen links (Toni verschwindet)
+
+Toni:	Dank di Gretchen!
+Lieschen:	Also und düt Böötchen hier, also das ist joa the (se) best of the (se) best.
+
+(Türe geht auf Hinnerk schaut raus)
+ 
+Hinnerk:	Lieschen! Menschenskinner woar is denn min Hämorrhoiden-Salbe?
+
+Lieschen:  	In Kulturbüddel futt tegen de gröene Tannenpaste, Hämorrhoiden-Salbe blau. 
+Nich allweer verwesseln! (Hinnerk geht wider rein)
+Mäggie:  Un hebb i de veelen Poolse tellt? Also doar gifft dat joa sogor eene mit Wellen un 
+Rutsche! Worbie bi de Rutschen müss man echt oppassen... dor hebb ik 
+annerletzt moal in Dörpen in´t Swemmbad unfreewillig n Tanga bi kregen un 
+min Bikini-Top was Ok nich mehr doar wor´t henhört. Haar ik dummerwis erst 
+markt as ik torügge an miene Pool-liege was ...
+(Türe geht auf Willi schaut raus)
+
+Willi:	Mäggie? Ah, Gott sei Dank du büst all doar. Mäggie, use Woaterbett tohus is n 
+schietkram kägen düsse Schaukeleei hier. Woar üm Gotts Noam bünt de 
+Riesetabletten?
+Mäggie:   Lüttket rodet Täschken in ´n Rücksack... doar ist Rieseapotheke binnen... awer 
+Willi...blot eene nähmen, nich weer dreeie...anners klappst du mi noasen weer 
+tosamen.
+
+(Willi geht wider rein)
+
+Gretchen:	(holt ein Zettel aus der Tasche) So dann loat us doch moal kieken wat dat 
+vanoabend to eeten gifft. As wi vörhen biet Speisesoal vorbiekoamen bünt 
+hebb ik düssen Menüvörschloag in so´n güldenen Schaukasten seen und direkt 
+moal mitnoamen. So weet wi nu al woar wir us as erstet up stürzen moeten biet 
+Diner. 
+Lieschen:	Ja  man woar hest du denn wall den Kasten oapenkregen bitt schöen?
+
+Gretchen:	(holt einen kleinen Schraubenzieher oder Mini-Akkuschrauber aus der Tasche)
+ Mit min lüttket Warktüch. Hebb ik ümmer för sükke Notfälle dorbie. 
+Mäggie:  Sümst is de Fru! 
+(Türe geht auf Toni schaut raus, hat jetzt Hut auf, Gesicht ist ganz weiß)
+
+Toni:	Gretchen, de Sünnenkräme hebb ik nu funnen... und inschmeert hebb ik mi ok 
+all.... Awer ik find eenfach min Boadebüxe nich. Segg hest du de vergeten? 
+Gretchen:	Gott bewoar! Den Anblick willt wi doch de anneren Passegere woll ut de Ogen 
+holln. Groote Kuffer, Sietentaschk mit Klettverschluss. Dor bünt de Badesoaken 
+binnen. Un Toni, bevör du frachst... joa de Boadeschlappen ook.
+
+Toni:	(glücklich) Dank di Gretchen!
+Lieschen:   Gretchen   gäf mi moal dat Menü  her!   (nimmt   liest   vor) 
+Vorspeise:  Carpaccio  (Carpazzio  gesprochen)  an  buntem  Salat Wat 
+is dat dann? Wachte steiht sogoar dorbie ...dünne Schieven van roahes 
+Rindfleesch...
+
+Alle drei:	Roah?
+
+Mäggie: Pfui Deiwel, dat loat wi direkt ut, kiek doch moal, of dat viellicht n ördentliche 
+Höenersoppe gifft? 
+
+(Türe geht auf Hinnerk schaut raus)
+Hinnerk:  	Lieschen, ik hebb min Hämorrhoiden-Salbe funnden un allens futt moi un 
+heller veel inschmeert, man weet ja noit nich, woar dat alls mit Soltwoater 
+reageert un so, nich woar? 
+
+Lieschen:	Moi, joa joa, Moi hest du dat maokt min Leeve. Un moi dat wi alle dat du nu  ok 
+genau weet.
+
+Hinnerk:   	Du awer Lieschen, woar is denn mine Badebüxe? Ik kann de eenfach nich 
+finnen. Hest du de goar nich inpackt? .... Ik meen dat was joa nich schlimm mine 
+Söte, dann treck ik eenfach min Unnerbüx an. Dat markt seker kiene.  
+
+Lieschen:  	Ja Hinnerk, bi diene Schiesser-Feinripp, markt dat heel seker kiene... Natürlich 
+hebb ik dien Badebüx inpackt De ligg sogoar heel boaben drup, du brukst blots 
+den Kuffer opklappen. Doar ligg se...boaben drup. 
+
+(Mäggie hat zwischenzeitlich das Menü an sich genommen)
+
+Mäggie: 	Ne, Mist ne Höenersupp gifft dat nich. Awer ne Supp ist as tweiden Gang 
+dorbie. "Kaltes Tomatensüppchen mit Basilikummschaum." Ja Dünnerslach, de 
+könnt sik ehrn Schum spoaren; schöllt se läwer de Supp warm moaken. Dat gifft 
+doch nich, kolde Supp, wat schöll dat dann? 
+Gretchen:	Viellicht könnt wi die ja froagen, of se uns de Supp kört inne Mikro opwarmt. De 
+wörd doch hier up´t Böttchen ergens ne Mikrowelle hebben. Un wo geiht dann 
+wider mit dat Menü? (nimmt Menükarte) Entrecot (EntreKOT gesprochen) mit 
+Kartoffelschaum und Chimichurri (Tschimmitschurri gesprochen)
+Mäggie:  Wat hebbt de bloet ümmer met ehren dösigen Schum. De schöllt moal läwer n 
+örntlichen Tuffelbrei moaken.
+
+Lieschen:  		EntreKOT? Dat hört sik awer goar nich gaut an, un wat schöll dat wän: Schnurri-
+Schnurri? (zuckt mit den Schultern ...Türe geht auf Willi schaut raus)
+Willi:	Mäggie! Mäggie! Also mi is ümmer noch so öwel in´t lief. Ik hebb nu al twee 
+Riesetabletten noamen, schöll ik noch... 
+Mäggie: 	...NEIN, schöllst du nich! Anners süchst du weer Regenbogenfarven wenn du 
+noch eene nimmst
+Willi:	Also gaut, dann müsst du awer noasen koamen un mi min lief strieken. Un äh, 
+Mäggie, ik hebb nu min Badebüx antrocken... doar stimmt wat nich mit. De 
+zwickt und zwackt und schluppt heel tied tüschken mine Backen.
+Mäggie:	Willi! Du hest nich all weer min Bikinibüx antrocken so as´t letztmoal in Dörpen, 
+woa wi bold rutschmeeten wassen wörn, Blaut  wegen di.  Nochmoal to´t 
+mitschrieven: Roodet Dreeeck - miene Bikinibüx - blauet Viereck  - diene 
+Badebüx! (zeigt dabei die Formen)
+
+
+
+Willi:	Au hoppla, dann wessel ik kört noch, awer Mäggie, weest du ik wull die 
+eegentlich ok blots dien Bikini-Hösken all n bittken vörwoarmen, dormit du dat 
+noasen gemütlicher hest. 
+Mäggie:	Is al gaut Willi, hest gaut moakt!
+	(Willi freut sich und schließt die Türe)
+
+Gretchen:	So,  dann  loat us moal kieken wat dat för een Noachspies gifft.
+    Eierlikörmousse mit Himbeeren - so nu bünnt wi dorbie!
+
+Lieschen:  	Groodoardig, dann loat wi Gang 1-3 utfallen und nähmt 4-moal Eierlikör
+Mäggie:	Gaude Plan! Oh! Gretchen! Pack den Zeddel wech, doar unnen is de Kapitän 
+Struvenhus!
+
+Lieschen:	Woar?
+
+Gretchen:	Woar? (fallen beide fast von der Reling)
+ 
+Mäggie:  	Na doar unnen! Doar lehnt hei doch an de Palme! Au man is dat een 
+Schnuckelsche oder? Kiekt moal, woar de güldene Knöppe up sien Uniform in 
+de Sünne glitzert
+
+Lieschen: 		Na för den wür ik ok moal öwer Bord goahn, wenn he mi retten dö.
+Gretchen:	Awer blots mit Mund-zu-Mund-Beatmung! (alle drei lachen)
+
+Mäggie:	Kummmt Mädels fix, he sücht doch ut as wenn he blots up us wachtet, of nich? 
+(alle drei rücken sich den Busen zurecht und stolzieren raus)
+(Die Kabinentüren gehen gleichzeitig auf, die Männer kommen heraus, alle in 
+Badekleidung + Bademantel mit Hut/Käppi, ganz weiß im Gesicht, Handtuch, 
+Badelatschen, Willi trägt Socken, Toni und Willi haben einen Rucksack dabei)
+
+     6.	Szene 
+Toni,Hinnerk, Willi
+
+Alle drei:	FERTIG!
+Toni:	Un doar schöll noch eene seggen, wi Mannslue  bünnt van use Fraulü afhängig. 
+
+Hinnerk:   Pah, so´n Tünkroam! Gaud ik haar wall n bittken seuken möst, awer dat ligg 
+blot an düt komisch System woar Lieschen de Kuffers packt. Ik wör dat joa heel 
+anners moaken... 
+
+Willi:	Joa ganz seker sogoar... Kuffer oapen moaken, allet rinstoppen un Deckel weer 
+dichte... 
+
+Hinnerk:   	Net so ist dat! Un dann ringriepen, rummwöhlen, un dat antrecken wat de as 
+erstet to packen kriegst. (alle lachen)
+Toni:   	Mode noar dat Taufallsprinzip! Woar bünt denn nu eegentlich use Fraulüe 
+allweer hen? (linst über die Reling) Joa ik weer verrückt..., doar klävt use 
+Madams annen Kapitän as de Flegen up n Mestbült (die andren schauen).
+
+Willi:	Würklich heller treffende Verfutt met n ....Mestbült... Wat is denn dat vör 
+eene... Sascha Hehn un Florian Silbereisen för Arme? Haff sik rutputzt as so´n 
+Pfau met siene dösigen güldenen Knöppe.
+Hinnerk:  	Also Willi, dat is de Kapitän... un dat is eene Kapitänsuniform... dat mutt he so 
+drägen...is sien Deenstkleedung ...He haff de heele Verantworden för 6.000 Lüe 
+hier ant Bord. Un so´n grodet Schipp to manovreeren is seker ok kien 
+Kinnerspoel.
+ 
+
+Willi:	Dat weet ik woll dat so´n manovreeren met heel völ Verantworden tohope 
+kummt, ik bün joa nich brägenklötterig. Awer weet ji wat...min Schufkoar is al 
+35 Joare olt, haff Dauken in´t blech doar künnst beste Caribian-Steel-Drum up 
+spölen und weegt 120 Pund ohne Fracht in de Koare. De Reifen is nett so as du 
+Toni, wenn du Freidoags ut Olker eierst. 
+		N' neeien dür ik mi nich koapen weil Mäggie meent de deit noch. Siet 35 Joar 
+vör ik düsse Koare all ....unfallfree! dör usen goarden.... Dat is nich ohne segg ik 
+jau ... dat is wat heel anners as hier n bittken mitn Böötchen rümtauvörn... DAT 
+is  kien Kinnerspoel! Vör mi is düsse Rümschipperei jo woll n' Klacks. Düssen 
+Lackoape doar unnen brukt sük also goar nix intobilln un sick so an use Fraulüe 
+ranschmieten.
+
+Toni:   	Also Willi, ik will joa nix seggen, awer de "Lackoape" schmit sück goar nich an 
+use Fraulüe ran! Dat is annersum! De dree hebbt n Kreis beld und hebbt üm 
+inkesselt ... den armen Kerl. Un nu kiekt moal, de weet goar nich wat met üm 
+passeert (lacht).... Dat is use Chance... so lange he um sien Leven bangt hebbt wi 
+tied vör n moiet Sünnbad... wat meen ji? 
+
+Hinnerk und Toni:	Gaude Idee!
+Hinnerk:   	Ik bün inschmeert van boven bis unnen!  Weil weet ji wenn du so hell büst as ik, 
+kann dat heel gevfaarlich weern. Büst du heller as brünett, schmeer di in bis in 
+de Rosett! Un dat meen ik woortwörtlich! 
+(alle breiten ihr Handtuch aus, ziehen Bademantel aus, legen sich auf die drei Liegestühle, die 
+in der Mitte platziert sind)
+Toni:   Dann müsst du dich nu awer tominst ok dreihn as n Hähnken upn Grillspieß... 
+dormit sük dien Inschmeerereie ook lohnt haff. (lacht)
+Willi:	(lacht kurz mit, merkt dann dass ihm doch übel ist) Kerl ne, mi geiht  dat goar 
+nich goud... düsse Schaukeleie moakt mi so richtig fix und fattich,,,, un van de 
+Riesetabletten wörd mi heel schummrig und dorto krieg ik n richtig pelzige 
+Tunge. Ik hebb al n richtig Fell in´t Muul.
+
+Hinnerk:    Du Willi dorbi hebb wi doch noch goar nich ofleggt, wi steiht joa noch in 
+Hoafen... nu stell di moal vör woar dat is wenn wir ersmoal op oapene See bünt. 
+Dat geiht dann blots noch hooog un runner.... Hooooooog und runner... 
+hoooooooooooog un runner (zeigt es Willi dabei, der wigt mit)... dat wörd n 
+wilden Ritt doar kannst di up verloaten...Weest du ik hebb moal hört... wenn du 
+seekrank büst... dann hest du Angst dat du övern Deister geihst... awer wenn du 
+richtig seekrank büst.... dann hest du sogoar Angst dat du an´t Leven blievst... 
+man n Appelkauken schöll helpen... schmeckt nett so gaud up´n Hen- un 
+Rückwech... 
+
+... Awer segg moal Willi dü wörst ja upnmoal heller gröen in´t Gesicht, wat is 
+denn los?
+ 
+Toni:	Hinnerk, nu hoal moal dien Sabbel und loat Willi tovreden, bevör he över de 
+Reling geiht to´n Fischkes fauern... (deutet sich übergeben an... macht siene n 
+Rucksack auf, holt drei Bügelbier raus) Doar! Hier gifft dat moal wider.... 
+Medizin..., dat is DAT Middel tegen Övelkeit! Weest du Willi, doarmit schaukelt 
+dat an enne binnen nett so as buten...et kummmt dann alls in Futtgewicht!  
+(Alle drei lassen die Flaschen ploppen)
+Willi:	Toni! Dat hört sük richtich logisch an! Du harrst Doktor wern schöllt!
+
+Alle drei:	PROST!(trinken,Willi trinkt in EX aus, die anderen beiden schauen überrascht)
+
+Willi:	So, nu geiht mir dat all beter! Hest du noch wat meer van düsse Medizin? (kriegt n 
+zweites)
+
+Hinnerk:	Willi worüm hest du eegentlich Socken an, du hest doch bi düssen 
+Sünnenschien kien kolle Feute or wat?
+Willi:	(selbstverständlich) Ne hier up de Poolliege nich, awer ümmer wenn ik 
+schwimmen goa krieg ik kolle Feute. 
+
+Hinnerk:	Kolle Feute biet schwimmen (schüttel mit dem Kopf und schmunzelt) un wat is 
+mit dien Ohrn?
+
+Willi:	Na de bünd natürlik ook kolt, fröher harr ik dorvör joa ümmer Ohrenschützkers 
+dorbi hatt vör´t ünnerduken. De loat ik nu awer lever wech. Hebb ji dat moal 
+probeert? De suugt sük ünner Woater bi den Druck ümmer faste so dat n 
+Vakuum entsteiht. Fleeten Sümmer möss ik dornoa twee Weken met 
+Ohrenschützkers bi 38°C sümmerliche Temperaturen rümloapen bis sik dat 
+Vakuum weer löst haff. Dat was n Tortur segg ik jau... de kann ik nich nochmoal 
+bruken.
+
+Toni:	Hinnerk bi usen Willi was glöv ik ok vörher al Vakuum tüschken de Ohren 
+(lachen beide) 
+
+Willi:	Ha-Ha! Oh... bold vergeten! (kramt Solariumbrillen raus) Vör use Extra 
+Sekerheet un Schutz! Nich dass use Oogen mörgen nich mehr daut.
+
+Toni:   	Ha Willi... min beste... ik nehm alls torügge, of un tau brannen dor boven doch 
+noch Luchter bi di. 
+
+(Ziehen die Brillen auf, lehnen sich zurück und quatschen mit geschlossenen Augen weiter)
+Hinnerk:  	Tau lang könnt wi awer uk so un so nich liggen blieven, ik bün doar doch wall 
+heller empfindlich!
+Willi+
+Toni:	Wicht!
+
+ 
+Hinnerk:  	Wat Wicht?  Nix Wicht! Hebb ji moal n sünnbrand op jaue Nippels hatt? Dat is 
+allet annere as moi segg ik jau (die beiden andren lachen hämisch)
+...Dor gifft dat goar nix tau lachen.... Ik bün moal in´t Freeboad inschlöppt ...un 
+eegentlich haar doar blot Lieschen schuld an... also nich an´t inschloapen... 
+awer de haar mi joa moal inschmeeren könnt. Min leeve Scholli, bis ik 
+dorachter köm haar ik Nipoels as Schnullers Dunkelrood! Ik möös dree lange 
+doage met löckers in´t T-Shirt rümloapen weil ik dat schürn an den Stoff nich 
+erdrägen kunn. 
+Willi:	(lacht) Man mutt sik dat erstmoal woarhaftig vörstellen!
+
+Toni:   	Leever nich! Awer Hinnerk du hest al recht, tau lang bliev wi hier nich liggen... 
+awer seker nich wägn de sünn. Ik glöv ehr dat wi anners de Doamen up düss 
+Krüzer veel to veel in Verlegenheet brengt.  Dat könt wi de joa nich andaun.
+
+Hinnerk:  	... Ah.... Ik verstah... wegen use Astroal Körper!!!! 
+
+(Alle drei verschränken die Arme hinterm Kopf und begeben sich in möchtegern Sexy 
+Präsentations-Pose)
+Toni:	Heel genau! Ik hebb de letzte tied in´t huus extra vör usen Trip n bittken 
+traineert.  
+
+Willi:	Ik Oook!
+
+Toni:  	Du ook Willi? (nimmt Brille ab und begutachtet ihn) Wat hest du dann 
+traineert?  Dien Kaumuskeln ... un dien Daumen vör de Fernbedeenung oder 
+wat? 
+
+(jetzt nehmen auch die anderen die Brillen ab)
+Willi:	Von wegen! Ik hebb mi bi de Gymnastik-Turn-Gruppe in´t Leeier Sports-Hus 
+anmeldt
+
+Hinnerk:	Gymnastik?
+
+Willi:	Joa, ik was düttmoal to laate mit anmelden und dat was de letzte Kurs de noch 
+free was. Kamasutra was all vull un Ikebanda hebb ik fleeten joar all moakt. De 
+is ja jeden Maandag avend in´t StruvenHus. 
+Toni:  	Moment moal, nu hest du aver wat dörnanner broakt. Maandag avends is doch 
+de Schwangeschaftsvörbereedung in´t StruvenHus  un kien Ikebanda!
+Willi:	Joa, heel genau! Spann du doch moal du dien Beckenboden an - dat ist goar 
+nich so licht segg ik di! Un bi dee övelkeit vörhen in min Koje, doar haff de 
+Atemüvungen ok heller holpen (macht die Atemübungen vor!)
+
+Hinnerk:	Also Willi bi die is ok Hoppen und Moalt verlorn.
+ 
+Willi:	Woso? Dat is heel man wat schwoor! Doar bün ik fix un alle wenn ik noar huus 
+koame. Schade dat ik düsse weeke nich doar ween kann, wi hebbt düsse weeke 
+de Besichtigung van´t Kreisssaal upn Programm.
+
+Toni:   	Den Kreißsaal besichtign, aha! Du büst wall ok bi dien Geburt direkt moal as 
+erstet vanne Bettkante falln, anners kann ik mi dat nu würklich nich mehr 
+erklärn...
+Woar ok ümmer..., weet ji wat wi bold vergeten hebbt? Us Fernkiekers Marke  
+Egenbau, weet ji wat ik meen?
+
+Hinnerk:   	Au stimmt! Extra för usen Urlaub tosaoamentimmert doarmit wi nix verpasst. 
+
+ (Toni holt zwischenzeitlich ein riesengroßes Fernglas aus dem Rucksack, extra lange 
+Objektive!) 
+
+Toni:    (In Pose präsentierend) Glotzi3000 ... de Fernkieker  taun fern kieken... also 
+richtich fern fern kieken... fern so fern as man man fern kieken kann fern 
+kieken... so fern kieken...
+Willi:	...Jo jo weet wi doch... un nu loat us de erstmoal testen of de ok nett so 
+funktionieert as wi us dat vörstellt hebbt. Was ok ja goar nich so licht dat alls so 
+tosoamentobaun, de oole Jagd-Fernkieker vun min Opa Willi as Basis! 
+
+Toni:  	Nett so is dat... un mit de Kristalldingers ... oder in min Fachjargon ok "Prismen" 
+nömmt ... de ik vör us in´t Internetz bi "Umet" bestellt hebb ... de warn goar 
+nich so düer... haff blot n settken dürt... Direktimport ut China.
+Hinnerk:  	Un 3 Spezial-Lupen-Glöser vun min Tante Irmi de sei ümmer taut Zeitung lesen 
+bruukt haff, de wass joa blind as n ! De hebben wi doar denn ok noch inbastelt. 
+
+Willi:	Un taun kröndet enne hebb wi den boden van een Cola-Flasch noamen. Noa 
+diene Berechnung Toni, ist dat nu  de scharpste Fernkieker up de Welt. Worbie 
+man mutt extrem uppassen dat man dorbie sine Netzhuut nicht verbrutzelt. 
+Toni:  	Dorüm hebb wi doch use Sekerheitsvorkeerungen metnoamen (er zieht eine 
+witzige Schweißerbrille o.ä. auf, steht auf und schaut dann durchs Fernglas) 
+Wow! Scharp as man wat! Ik dreih dör Männers... wi bünt genial...alles vull  .... 
+vull met halvnackte Fraulüüe... un moiie Bikinis... doar is sogoar eene ohne 
+Bikini... gifft joa nich, de haff Piercin in Buuknaffel... kann ik so seehn. So 
+schoarp is us Fernkieker! 
+Hinnerk:  	Wo? Ik seeh blos  use Fraulüe und de hebbt ....Gott wees gnädig... goar kien 
+Bikini an... un Piercing hebbt se seker ook kiene!
+
+Toni:	Awer seeih ik denn nich, doar an Strand!!
+Willi:	Wat vörn Strand??? Wi steiht doch ümmer noch in Hoaven. Toni dat is nicht to 
+glöven wat du doar vertellst, doar stimmt wat nicht mit.
+Toni:  	Doch seker! Ik seeh doch den Strand!!! Wachte doar is n Schild... dor steiht wat 
+up: " K - O - R - S - I - K - A... Korsika! 
+
+(er nimmt das Fernglas ab, die Männer starren sich an)
+Hinnerk:	Korsika! (ungläubig)
+
+Willi:	Von Savona aus? (Toni nickt und grinst)
+Toni:   	Wi könnt van Savona bis noar Korsika röver kieken! Ik segg blots .... 
+Overköperfree met Buuknoavelpiercing!!! .... 
+(Die Männer streiten sich ums Fernglas, reißen es sich gegenseitg im Kreis immer wider aus 
+der Hand, streiten sich wi kleine jungs....)
+
+Hinnerk+
+Willi:	Ik will ook, geev mi dat Dinge nu moal... neee nu bün ik an de riege... ne loat mi 
+erst nomoal....  
+(es kommt eine Durchsage)
+
+Durchsage: "Meine sehr verehrten Passagiere, bitte finden sie sich alle auf dem 
+Pooldeck ein! Alle Passagiere auf das Pooldeck bitte. Hier findet in wenigen 
+Minuten die Sicherheitseinweisung statt. Sicherheitseinweisung auf dem 
+Pooldeck! Es müssen alle Passagiere anwesend sein, sonst verlässt das Schiff 
+den Hafen nicht. Sicherheitseinweisung!"
+
+(Willi holt Schwimmflügel raus und beginnt diese aufzublasen)
+
+Hinnerk:  (enttäuscht mit Fernglas in der Hand) Och wat schoade! Nu woar dat 
+neddergroad so interessant wörn is! Ik willl nich tau düsse dösige 
+Sekerheetsünnerwisung!
+Toni:  	Eben! Dat is doch alls sümsterklärnd, wenn du in´t water fallst mutt du 
+schwimmen. Kannst du nich schwimmen möst du dauken ...(lacht)
+Willi:	So, ik bün faddich met wark, kann los goan! (die andren starren ihn an) Ja ji 
+bruukt goar nich so dösig kieken, för jau hebb ik ook wecke dorbie, Blots  för 
+den Noodfall
+Hinnerk:	...Schwimmflögelchen?!?!
+
+Willi:	Ha ja kloar, met dien Plautze, passt du doch hier so un so in kien Rettungsring 
+rin. Un nu koamt, ik will nich de letzte ween.
+(geht ab)
+Toni:	(resigniert) Kummm Hinnerk, nich noadenken... nich upregen...Nutzt joa doch 
+nix... 
+
+Hinnerk:   Awar koame wat wull, Schwimmflögel treck ik noit nich an! (Männer gehen ab)
+
+(Bühne ist kurz leer dann kommen die Frauen mit dem Kapitän Struvenhus im 
+Schlepptau, jede kämpft um einen Platz an siene r Seite)
+7.	Szene
+Gretchen, Lieschen, Mäggie, Kapitän
+Gretchen:	Also, Leeve  Herr Kapitän Struvenhus, dat se sück extra blot för us eere Tied 
+nähmt un us persönliche Sekerheetsünnerwisung geevt... also dat is joa wirklich 
+sowat van moi... wi freit us soooo heller.
+
+Kapitän.: 	Tja, dank jauen Liebreiz min leeve Doamen, bleev mi joa bold nix annders övrig, 
+as de Sekerheitsünnerwisung persönlich vörtaunehmen. Awer ik mutt jau 
+seggen, so völ tied bliev nich, ik mutt direkt dornoa up de Kommandobrügge, wi 
+willt vandoage joa up tied ut n Hoaven utloapen, nich woar?
+Mäggie:  	Ach wat seker doch Herr Kapitän Struvenhus, nich dat wi an enne ergens noch 
+toloate bünt... dat will wi seker nicht. Man eene Froage haar ik doar noch... 
+bünt se vanoavendd ook bi´t Kapitänsdinner dorbie?  
+
+Kapitän: 	(verblüfft) Of ik bi´t Kapitänsdinner dorbi bün? Ähm also jaaaaaaa, dat nähm ik 
+doch an.
+Lieschen:  	Mäggie, denn bruukst du die jo woll nich n' heelen Oabend  kägen den Kapitän 
+quetschen wa, ik will doar ook moal sitten goan! 
+Gretchen:	Dat is doch heel kloar, Mäggie sitt bi de Vörspeese bi üm, Lieschen bi´n 
+Hooptdgang ... (verführerisch) un ik... bün sien Naaspeise .... (verbessert sich 
+schnell) Also ik meen tau de Naaspeise ik. 
+Kapitätn.:	Ik denk de Doamen wördt sik woll eenig, un vör allem möt wi joa ook noch n 
+Platz vör jaue Gatten finnen. 
+
+Mäggie:	Wat för Gatten?...
+Lieschen:	Na dien Willi!
+
+Mäggie:  Ach soooooo, ja, ja stimmt, de bünt joa ok noch doar... awer de könnt wi ook in´t 
+Speesesoal heel noar achtern setten. De freet sük wenn se man öberhaupt wat 
+to eeten kriegt. 
+
+Lieschen:  	(will schlau sein) Also use Mannslue bünt ja nu ook egoal... Ik haar doar moal 
+een Froage Herr Kapitän Struvenhus...Weet se ik hebb mi up düsse Krüzfoart joa 
+al n bittken vorbereedet und veel leesen dormit ik ok mitproaten kann. Also 
+wat mi nu noch besünners interesseeren dö.... Woveel Meter bünt wi 
+eegentlich över den Meerespeegel nu genau.
+Kapitän.:	Woveel Meter över den Meeresspeegel, also nu bün ik awer sprachlos... 
+
+Gretchen:	Ja dat kann ik mi vörstelln. Nich jede Passageere bünt so gaud beläsen as wi 
+oder? Wat ik nu noch gern weeten wull... up wecke Siete van düt Böötchen 
+geiht mörgend eegentlich de Sünne up?
+
+Kapitän.:	(ungläubig) Up de Hinföhrt Backbord, up de Rückfoart Steuerbord
+
+Alle drei:	Faszinierend!
+Mäggie:	Un noch een letzte Froag... Is in Pool Soltwoater oder Seutwoater?
+
+Kapitän:	In den Pools? Ja doar is Soltwoater binnen.
+
+Mäggie:	Ahhhh! Dorüm ook de Wellen!
+
+Kapitän.: 	Mine Damen, se bünt woarlich utgewönliche Erscheenungen... sücke geballte 
+Kompetenz up een Bült hebb ik noit nich seehn.
+Alle drei:  	Danke! (sind sehr geschmeichelt) 
+(Es kommt eine Durchsage: WIR STARTEN NUN MIT DER SICHERHEITSEINWEISUNG!)
+Kapitän.: Ah dat is nur de Opraup vör de Sekerheetsünnerwisung. Wichtig is nu dat ji heel 
+genau oppasst wat ik segge, wenn eene Gefoarensituation intreeten deit möt ji 
+genau weeten wat to daun is. OK?
+
+Alle drei:	Eye-Eye, Kapitän! (salutieren)
+
+Kapitän.:	(Spult auf Hochdeutsch ab) Es gibt zwei verschiedene Warnsignale auf dem 
+Schiff dreimal kurz tuten bedeutet: Mann über Bord! Sollten sie in dem Fall 
+Sichtkontakt zu der Person haben die in Seenot ist, nehmen sie den 
+nächstbesten Schwimmring und werfen diesen über Bord in Richtung der 
+Person.
+
+Mäggie:	Mist in´t werfen was ik noch noit gaud!
+
+Kapitän.: 	Das zweite Warnsignal ist ein langer Hupton, das bedeutet: Unruhige See, 
+Schwimmwesten anziehen und sicheren Platz suchen! 
+Und einmal kurze Sirene bedeutet Entwarnung! 
+Zu Testzwecken wird nun der Probealarm ausgelöst, damit die Passagiere 
+wissen, wi sich das anhört, wenn es ernst wird! 
+(schaut auf die Armbanduhr) 
+
+Und der Alarm geht los in 3-2-1
+
+(es tutet dreimal kurz, die Frauen zählen mit den Fingern mit)
+Alle drei:	Mann öwer Bord! (holen die Rettungsringe und werfen diese über Bord)
+Kapitän.: 	Halt! Dat is doch blots ne Probe! See dürt doch nich... to loate! (fasst sich an 
+den Kopf, schüttelt diesen, holt ein Funkgerät raus) Kapitän Struvenhus an 
+Crew, Kapitän Struvenhus an Crew 3 neue Rettungsringe aufs Sonnendeck 
+bitte!
+Gretchen:	Also dat haff joa all moal gaud klappt wa?
+
+Lieschen:  	Find ik ook, wi bünt superfix wän. As "Mr. Blitz" ... "Piu...Piu" (macht dabei 
+schnelle Handbewegungen)
+
+(es ertönt der nächste Warnton - langer Hupton, Frauen erstarren hören zu)
+
+Mäggie: Langer Hupton! In Sicherheit bringen! (Alle drei werfen sich an den Kapitän 
+Struvenhus und umklammern ihn)
+Kapitän.:	(schwankt) Awer mine Doamen, se erdrückt mi joa, nu bidde, bidde loat se mi 
+doch löss, hülpe...hülpe ik krieg kien luft mehr. (es ertönt ein kurzer Hupton)
+Lieschen:	Vörbi... Dat was de Ton vör Entwarnung!  (Lieschen und Mäggie 
+lassen los, Gretchen hängt noch weiter dran ... Kapitän Struvenhus schaut erst 
+erleichter... dann auf Gretchen mit einem Stirnrunzeln...) 
+Kapitän:	Ähhhhm...
+Mäggie: 	Gretchen? Is Vörbi!!! kannst löss loaten...
+Gretchen: 	oh joa... schoade... lässt ganz langsam vom Kapitän ab...
+Kapitän:	Puh, Gott sei Dank! Also min Doamen, ik mutt seggen...
+Gretchen:	... dat was sensationell...
+Lieschen:	Wi! Bünt sensationell wän, oder Hr. Kapitän?
+Kapitän.: 	Ähm, joa natürlich. Ik bün noch heel ut Oatem, so hebbt se mi begeestert  
+(hustet) Awer nu mutt ik würklich heller nödig torügge up de Kommandubrügg 
+De Tied löppt... awer bünt se sik seker, ji wörd mi in Erinnerung blieven ... 
+(hustet, geht ab)
+Mäggie:	Hebb ik dat hört? Wi  wördt üm in Erinnerung blieven!
+
+Gretchen:	(schwärmend) Haaaa, ik glöv wi hebbt n dicket steen in Brett .... Bi Käpt´n 
+Struvenhus
+
+Lieschen:	Woarschienlich bünt doar nich veele Passageere so fix van Begreep as wi 
+dreeie! (Es ertönt das Schiffshorn)
+Mäggie:	Oh nu geiht lös, oh ik spür et all, ji ook? Dat ruckelt wi Sau!
+(alle drei beginnen sich so zu bewegen, als ob das Boot rüttelt)
+
+Gretchen:	Oha ik glöv nu haff he den Rückwartsgang rinmoakt. Oh man, ik bün heller 
+opgeregt, dat Böötchen föhrt! Dat Böööööötchen föhrt!
+Lieschen:	Un nu kiekt moal de Lüüe an´t Hoavenkant, de winkt us alle tau 
+(aninmirt das Publikumm zum winken) is dat nich moi 
+	(alle drei holen ein weißes Taschentuch raus und winken an der Reling) 
+Alle: 	Tschüüühüüüüsss, arrivederci, ciao-ciao, wi goat up grode Foahrt!
+(Musikienspieler "Time to say goodbye)
+
+Hinweis: Für die letzte Szene könnte jeder Gast eine kleine Packung Taschentücher auf den 
+Stuhl bedruckt mit MS-Rosta - Theaterverein Lehe e.V., auch als Souvenier zum mitnehmen 
+bekommen?
+
+Vorhang - Ende 1. Akt!
+
+
+2.	Akt
+(Es ist ein Tag später, Vorhang öffnet sich, man hört Schiffsgeräusche, 
+Möwengeschrei, eine der Kabinentüren geht auf, Toni und Gretchen kommen 
+heraus, das Fernglas der Männer liegt noch auf den Liegestühlen)
+
+  1.	Szene 
+Gretchen, Toni
+Gretchen:	Ach Toni, ik hebb so gaud schloapen, dat schaukeln van düt Bööötchen haff mi 
+heel sanft schloapen loaten. (glückselig).
+Toni:  	Gretchen, dat Schipp is kien Böötchen, dü büst doch güstern Oabend ook dorbie 
+ween, as wi noa dat Kapitänsdinner de Kommandobrügge bekieken düssen.
+
+Gretchen:	Ja Lüe, doa gaff dat joa goar kien Stürrad! Blot 1.000 Knöppe un Schalters un 
+Lüchter. 
+
+Toni:  	Nett so ist dat Gretchen, dat is ja ook kien Boot met Stürrad ut Holt! Doar most 
+al richtich wat up´n Kastn hebben üm dat to stüren. Also gaud, ik wörde mi dat 
+ja wall tautraun, ik hebb dat joa ümmer alles futt up n Kast un güstern Oabend 
+hebb ik ja ook futt kapeert woar dat hier alls fuktioneert.
+
+Gretchen:	Ik weet woll dat du n cleveren Kerl büst, Toni min Söten... man dat is bis nu in 
+use 30 Ehejoahren heel an mi vörbie goan. Awer nu  man gau min lüttken 
+Kapitän, wi goat all moal fröhstücken, bevör de anneren ut de Koje koamt.
+
+ (gehen ab) 
+
+(Türe geht auf, Hinnerk und Lieschen kommen heraus)
+
+   2.	Szene 
+Hinnerk, Lieschen
+Lieschen:  	Hinnerk, Hinnerk kiek! Wi bünt op de oapen Seei, hach is dat moi hier, oder 
+meenst nich? Du segg moal woar föhrt wi nochmaol genau hen?
+Hinnerk:	Noar Marseille! ... Marseille Lieschen!
+
+Lieschen:	Ach wat moi! Doar waren wi joa al lang nich mehr! 
+Hinnerk:	Lieschen, wi waren doch noch noit in Marseille... wat du 
+meenst is Mainz... 
+
+Lieschen:	Marseille, Mainz... egoal - Hauptsoak wi bünt nich in´t Hus
+ 
+Hinnerk:  		Doar hest du allerdings recht. Ach dat is ook moi, wenn man so op de Seei 
+rutkiek und sük de frische Bries üm de Nöse weihen loaten kann. Un dat Eeten is 
+ook goar nich so leeip. Ik haar mi Vörnoamen, bi´t Oavendeeten ut jede 
+Kummme an´t Buffet wat to probeeren... un ik hebb dat schafft.. dat will wat 
+heeiten.
+
+Lieschen: 	Joa, allerdings hest du die joa dien Büxentaschke vullstoppt, bis nix mehr 
+ringüng, also Hinnerk nich dat du us noch van Fleesch fallst (schmunzelt dabei) 
+Hinnerk:   	Also as ik vannacht wacker wörn bün, weil ik up´n Pott mös, was ik bliede dat ik 
+wat as Wegzehrung inpackt haar!
+Lieschen:  	Up aale Fälle was dat Kapitänsdinner eenfaach wunnerboar, wi hebbt joa reein 
+taufällig direkt bi´n Kapitän an Dischk seten. Un dann düsse Kommandobrügg! 
+Also düsse Struvenhus, dat is joa n boas van Kerl...woar de dat allet so 
+bedeenen kann!
+
+Hinnerk:  	Pff! Boas van Kerl... ik hebb güstern Oabend futt seen woar dat allens 
+funktioneert mit de heelen Knöppe. Lieschen mit min utgeprägten technischen 
+Verstand, hebb ik de loage futt begrepen. Dat was för mi dat minnste Problem... 
+düt Schipp över de söben Weltmeere tau stürn moak ik mit links...
+       3.	Szene 
+Mäggie, Lieschen, Hinnerk
+
+(Türe geht auf, Mäggie kommt raus)
+
+Mäggie:	Mohoiiiiiiiin! Well stürt hier woar hen?
+Lieschen:  		Min Hinnerk schweeft all weer heel boavend. He meent he künn dat Boot hier 
+stürrn as Käpt´n Hook... met links... (deutet hämisch an)
+
+Mäggie: 	Ach, dat haff Willi mi güstern Oabend ook noch in´t Berre wies moaken wullt... 
+he meende he haar joa n VHS Kurs moakt... " Min ferngestürdet Boot uni k", 
+veel leeper künn dat hier ook nich ween, meent he. 
+Hinnerk:	Woar is de eegentlich, schlöpp de noch oder wat? 
+
+Mäggie: 	Nee, ik will blot moal in ruhe fröhstücken, de is mi vanmörgen al weer so op´n 
+Sack goan... dörum hebb ik dat Schild "Bitte nicht stören" van binnen anne döre 
+hangen... nu traut he sück nich mehr rut. Kumm Lieschen, wi goat al moal vör... 
+de Gretchen haff de ersten dree Brötckes bestimmt al up.
+
+ (Die Frauen gehen ab, Hinnerk geht an die Türe von Willi und klopft)
+ 
+
+  4.	Szene 
+Willi, Hinnerk
+Willi:	(ruft laut, nicht zu sehen) PSSCHHT! Bidde nich störn! Schwiegt still dor buten!
+
+Hinnerk:	(öffnet die Türe) Willi, kummm doar rut du Döskopp!
+
+Willi:	Dür wi denn nu al rut?
+
+Hinnerk:   	Ja, wi dürt rut, kumm man Willi! Weest du wat, wi beide goaat nu fix wat 
+fröhstücken, dormit dien Hirn moal weer in Wallung kummt.
+Willi:	Fröhstück?!? Ja doar bün ik ja moal heel gespannt... woar de up´n Meer hier 
+vanmörgen wall frische Eier för min Omelette herkrieget. 
+Hinnerk:	De hebbt Höhners dorbie!
+
+Willi:	Brutal! De denkt hier ok echt an allet!
+
+
+(Gehen ab, Bühne ist leer, dann tritt Kapitän Struvenhus auf mit Britta und 
+Gitta. Er steht in der Mitte, die Damen stupsen ihn rechts und links an, wenn sie 
+reden)
+5.	Szene
+Britta, Gitta, Struvenhus
+
+Kapitän.:  Min leeve Doamen. Dat is mi een außerordentliche Freide, dat ik jau up min 
+Schipp MS Rosta willkommen heeten dür! Seei, as Inhaberinnen van de gröttste 
+düttschke Reisebüros "Ahoi-Reisen" ... Woar warn nochmoal ehr Noamen?
+Britta:	Britta
+
+Gitta:	un Gitta
+
+Britta:	Strohbach
+
+Gitta:	Strümpfelbaum
+
+Kapitän:	Ah Frau Britta Strohbach und Frau Gitta Strümpfelbaum dat is mi....
+Britta:	...Nee! Wi heet Britta Strohbach-Strümpfelbaum un...
+
+Gitta:	... Gitta Strohbach-Strümpfelbaum un wi bünt...
+
+Britta:	...Tweieiige Twillinge! All in de Kinnerstove bünt wi anfangen...
+
+Gitta:	...use Reisebüro optobaun. De erste Reisen, de wi anboan hebbt...
+
+Britta:	... bünt taun Sans-See goan. De warn immer utverköff, dat was domoals...
+Gitta:	... usen ersten Kassenschlager! Dornoa hebbt wi us up Urlaub an´t Meer, See 
+und Fluss... spezialiseert... wi hebbt expandeert un... 
+Britta:	... 228 Reisebüros in heel Duitsland oapen moakt.
+
+Gitta:	 Für wenig Geld...
+
+Britta:	...reist du bei Ahoi-Reisen um die Welt!
+
+Kapitän: 	Also dorüm laat se mi jau up us Schipp willkommen heeten. Ik hoop sehr, dat us 
+Schipp de MS Rosta et dann tastächlich ook in dat Programm van jau Reisebüro 
+schafft. Ik hebb vör jau de besten Kabinen reserveert... dat versteiht sük van 
+sümst.
+
+Gitta:	Heel genau dorüm bünt wi joa doar, üm...
+Britta:	...uns een Beld van jau Schipp to moaken. Blaut  de besten Reiseangebote... 
+
+Gitta:	schafft dat an enne in use Katalog! Un tau betoalen mutt dat an enne ook noch 
+ween.
+
+Kapitän:	Versteiht sük van sümst ! Allens van  feinsten taun gauden Pries. 
+Britta:	Wi leegt Wert op gaudet Eeten un persönliche Betreuung... 
+Gitta:	und natürlich ook up gaude Ünnerhollung!
+Kapitän:	Allens kien Problem, dat hört allens tau usen Standard! See krieget vandoage 
+noch n Kostprobe! Ik persönlich, weer jau hier in use Pünten-Bar (zeigt auf die 
+kleine Bar) een Kapitän-Struvenhus-Cocktail präsenteeren, dorvör bün ik in heel 
+Europa bekannt. Usen Sport-Animations-Programm is legendääääär und als 
+afsolutet Highlight steiht noch use Travestie-Muscialshow an, mit de heel 
+bekannten Drag-Queens: Carla Cayenne, Pippa Pepper und Lulu la Belle.
+
+Britta:	Also van jau besünnere Musical-Show hebb wi all hört, doran hebb wi al hoge 
+erwartungen...  un wenn...
+
+Gitta:	dann noch düsse Sport-Animation holt wat se verspreken deit...
+
+Britta:	... hebbt wi nix dorkägen, dat wi jau Schipp de MS Rosta in de nächsten Saison... 
+
+Gitta:	...in usen Katalog mit opnehmt. Ümso beeter i jau hier anstellt, ümso grötter 
+wörd jaue Chancen... se weet seker heel genau wovöle Kunnen wi in heel 
+Duitsland hebbt.
+ 
+Kapitän: 	(erfreut) Im Katalog van Ahoi-Reisen! Dat is min gröttsten Dröm! Min Doamen ik 
+hebb för jau den besten Dischk in use Fröhstücksrestaurant "Venusmuschel" 
+reserveert... Dür ik jau an den Dischk begleiten?
+
+Britta:	Nee, ne, völen Dank ok...
+
+Gitta:	...dat find wi seker ook al sümst! Wi seiht us dann loater...
+
+Britta:	bi´t Kapitän-Struvenhus-Cocktail!
+Kapitän:	Dann wünsch ik jau n gauden Appetit un freei mi al up use Cocktailstünn! 
+(die Damen gehen ab) 
+
+Oh man dat dürt nich scheef goan, wi möt dat in den Katalog schaffen. Dat 
+Reisebüro "Ahoi-Reisen" is eene van de renomerteste in heel duitsland, wenn wi 
+dat schaffen, kriegt wi mehr Passageere up´t Schipp, ´n Barg meehr Geld inne 
+Kass... un ik krieg  min letzdet Ofteken dat noch fählt! (klopft sich auf die Brust) 
+Dat mott klappen! (er schaut aufs Meer hinaus) Seei ik dat richtig? Bünt dat 
+Delfine doar achtern? Dat was joa sensationell, doar künn ik joa futt n Dörsoage 
+moaken. Dat find de Passageere joa immer moi. Ach wat n Taufall, dor ligg joa n 
+Fernkieker. (nimmt das Fernglas und schaut durch, erschrickt) Huch is dat Moby 
+Dick? So dichte bi! Ik seeh joa sogaoar dat de Delfin Karies an de Kusen achtern 
+in Muul haff. Wat´n scharpen Fernkieker ik dor tau packen kregen heb... 
+Moment! Autsch ... mine Oogen! (legt das Fernglas weg) Mine Ooogen!!! (wird 
+panisch) Ik kann nix mehr seein! Ik heb mine Oogen verbrannt!
+
+6.	Szene
+Gretchen, Mäggie, Lieschen, Kapitän
+(Gretchen, Lieschen und Mäggie kommen, Kapitän Schifferlein tapst blind herum)
+
+Mäggie:	Harriejasses, bün ick vullfreten, un dat al bi´t Fröhstück.
+
+Gretchen:	Ik uk Dunnerwedder! Gott sei Dank, ik hebb en Kleed an, dat spannt nix üm de 
+Buuk! Aver wenn dat so wider geiht, denn süch man boald min Bikini nich mehr, 
+weil de direkt tüschgen mine Speckrullen verschwinden deiht, aver betoahlt is 
+betoahlt! 
+
+Lieschen:  Ik hebb allens, wat ik nich mehr äten kunn, eenfach inpackt! (holt Tupperdosen 
+aus der Tasche) Verschenkt wörrd hier nix!
+
+Kapitän:	Halloo? Is doar een? Ik bruuk Hülpe!
+
+Mäggie: 	Ach Herr Kapitän Struvenhus, wat is denn los? Mööt se nicht an de Stüür, von 
+düt Böötchen, stoahn?
+Kapitän:	Aber seker doch! Aver ik seh nix mehr! Blaut s noch ganz verschwommen!!
+
+Gretchen:	(winkt mit den Händen vor siene n Augen) Wi se seiht nicht mehr? Eenfach so?
+
+Kapitän:	Neeee, ik hebb mit dat Gloass hier na Delfine keeken und upmaal föhlde sich 
+dat an, as haar ik Bloasen up de Netzhuut un sietdem kann ik nix mehr sehn! Oh 
+min Gott ik mutt doch dat Schipp stüern un de Damen Strohbach-
+Strümpfelbaum mit Cocktails bezirzen. Aver seggt se maal, well bünd se 
+eegentlich? Ik kann dat nicht sehn, bünd wi us beid mal över`n Weg loapen?
+      (Die Frauen reden ganz laut, als ob er taub wäre)
+Lieschen:  	Ha ja natüürlich! Ik bün Lieschen, de gaud utsehnde, de güstern Oabend bi jau 
+an Dischk säten haff.
+  Mäggie:	Un ik bin Mäggie, de so moi proten kunn, güstern Oabend!
+
+Gretchen:	Und ik bün de Gretchen, de klaukste in düsse Runne!!
+
+Mäggie:	Joa kloar, villicht van achtern! (Mäggie und Lieschen lachen übertrieben)
+
+Kapitän:	Ja, ja, is al gaut, se bruukt nicht so luud bölken, mine Ohren bünd in Ordnung! 
+Aver wenn ik jau so höör, weet ik fuut, well se bünd, de Damen hebbt bi mi en 
+blievenen Indruck achterloaten! Aver wat dau ik denn nu mit mine Ogen??? De 
+Schippdoktor haff Verspätung, de is eerst ab Barcelona an Bord. Ik dreih dörr! 
+Wat dau ik Blaut ?
+Lieschen:  	Nu moakt se sück mal nicht direkt in ehr Kapitäns-Büx! Us schöll  al wat infallen! 
+(Sie stellen ihn an den Stehtisch)
+Mäggie: 	Up Steh, nu ritt se se sik mal tohoop, ik haff al en Idee! Gretchen, Lieschen weet 
+ji noch as Willi ümmer düsse Höhnerogen an de Tehn harr? Weet ji noch, watt 
+dar am besten hulpen haff?
+
+Gretchen:	Jo, du hest den Willi ümmer in`n Keller settet un hest sien Faut in Kamillentee 
+baadt. Dorbi musste  he denn futt noch de Tuffels up Grötte sorteeren.
+	(Die Damen lachen hämisch)  
+
+Mäggie:  	So süch dat ut! Un wat bi min Willi siene Höhnerogen helpt, helpt uk bi Kapitän 
+Struvenhus siene Ogen. Haff een van jau taufällig Kamillentee dorbi?
+
+Lieschen:  	Ik! Ohne Kamillentee gah ik nich up Urlaub, de Hinnerk steiht ünner 8 Brötchen  
+nich vun dat Fröhstück up, un dann haff he ümmer Buukpien (Lieschen macht 
+schmerzen im Bauchbereich nach). Dor helpt Blaut s Kamillentee. (Lieschen 
+erhebt dabei den Zeigefinger)
+Kapitän:	Mine Damen, bünd de sick dor seker? Mine Ogen brannt un juckt, ik glööv nich 
+dat Kamillentee......
+
+ 
+Gretchen:	Un doar süch man moal, dat se villicht so en Böötchen lenken köönt, aver vun 
+Medizin nix verstoaht. Mitkoamen!
+	(Die Damen ziehen den Kapitän in Lieschens Kabine)
+
+Kapitän:	Aver ick mutt doch toröch up de Kommandobrücke...??!
+
+Mäggie:	Ach wat, se seht doch eh nix!
+
+(Bühne ist kurz leer, dann kommen die Männer rein, vollgefuttert reiben sie sich 
+den Bauch)
+                                     7.	Szene
+Toni, Willi, Hinnerk
+Toni:	15 Meter Fröhstücksbuffet vun A as Appel bis Z as Zimtrullen.
+
+Hinnerk: 	Dorbi haff wi de Appel utlaaten un bünt eerst bi W as Worst so richtig instegen. 
+(Alle drei Männer nicken zustimmend und zeigen mit Mimik das es Ihnen 
+geschmeckt hat)
+
+Willi:  	Ik segg Blaut  E as Eier! (begeistert) In allen Variationen, also ik wüss ja 
+goarnich, op wo veel verscheeden Oarten Eier tobereitet werden könt! 
+Spiegelei, Rührei, Omelette, koakt Ei, hart, week, middelweek, also ik glööv 
+noah min 12 Eiern kann ik eerst wer tohuus so richtig op Pott!
+Hinnerk:	Ik hebb 8 Brötchen un 5 Eier eten, sapalot spant mi de Plautze! (Hinnerk 
+streichelt sich mit beiden Händen über den Bauch) Ik hoff Lieschen haff min 
+Kamillentee inpackt!
+
+Toni:  	Un düsse Käserad! Heppt ji dat sehn? So groot as´n Traktorreifen! Willi, mörgen 
+past du aver een bitgen beter op! Nich weer de Plastikdekoration op´n Teller 
+leggen!
+Willi:  	Ja, ja aver dat kann ja ok moal passeeren. De Trauben hebbt so verdammt echt 
+utsehn, haff ik nich maarkt, dat se ut Plastik bünd.
+
+Hinnerk:	Tominnst hest du dat dörtrokken un alle up eeten.
+
+Willi:  	Dat kenn ik so! Wat mine Mäggie op´n Teller leggt, mutt ik allns eten, dor proot 
+ik leever nich kägen an.....
+
+(Türe geht auf, Mäggie kommt raus)
+
+
+
+ 
+8.	Szene
+Mäggie, Willi, Hinnerk, Toni
+
+Mäggie:   Ah,hebbt ji endlich moal jau utgiebieget Fröhstück afschlooten? Ik mutt Blaut  
+kött de Wund- un Heilsalve hoalen, de Kapitän Struvenhus süch nix mehr. Wi 
+hebbt all en Ogenspülung mit Kamillentee moakt.....
+      (geht in ihre Kabine)
+Toni:   	Hebb ik dat nu richtig verstoahn? De hebbt den Kapitän , in diene Kabine 
+Hinnerk, de Ogen spöhlt, weil de nix mehr süch?
+Hinnerk:   	Mit min Kamillentee oder wat? Den bruuk ick aver doch för mine Plautze de is 
+doch nich för siene  Glotzer! (Mäggie kommt wider heraus mit Creme in der 
+Hand)
+Willi:	Mäggie, wachte mal, wat haff de Kapitän an siene Ogen?
+
+Mäggie:  	De haff dor dör so´n Gloas keken un nu süch he nix mehr! Wat mutt dat uk för 
+een Gloas ween ham... dat een meist blind moakt... also een unding, sowat 
+eenfach rümlegen to loaten! (geht ab)
+
+(Die Männer sind erst still, schauen sich bestürzt an)
+
+Toni:	Glotzi3000!
+
+Hinnerk:	Segg Blaut , wi hebbt dat liggen loaten? Au joa kiek dor boaben ligg et!
+
+Willi:	Ja, wat mutt düsse Idiot denn uk dor dör kieken? Dat is joa ook egentlich Blaut s 
+för profis!
+Toni:		Aua, aua, aua dat is nicht gaut, dat haff üm seker Bloasen up de Netzhuut 
+brutzelt!
+
+Hinnerk:   	Ja un wat moakt wi nu? Toni kiek moal bi Dr. Google, wat man dor kägen daun 
+kann. (Toni zieht das Handy raus)
+Willi:	(lacht) Sünnbrand op de Glotzerchen! So is`t, wenn een sien Zinken överall 
+riensteken mutt! Dann is he nu wall de eerste blinde Passagier an Boord!
+
+Toni:   	Wachte, doar haff ik, glööv ik al wat funnen. (Liest vor): De netzhuut van de 
+Ogen kann bi intensive Sünninstrahlung Schoaden nehmen. De Horn- un de 
+Binnhuut is verbrannt un bruukt Doage bis Weeken för Regeneration. De 
+Patient schull de Ogen vör Lucht schulen un kien anstrengende Aktivitäten 
+ünnernähmen. Denn schull sik dat Oogenlucht weer vullstännig instellen.
+
+Hinnerk:   (Frauen  +  Kapitän  kommen  dazu,  er  trägt  Sonnenbrille  ist  blind) 
+Min leve Schollie, doar hebbt wi nu aver n heel grote Schiete baut, op See mit´n 
+blinden Kapitän,.... un wi bünd schuld. Wenn dat us Fraun rutfinnen, goat van 
+doage noch dree Mann över Bord!
+ 
+9.	Szene
+Toni, Hinnerk, Willi, Gretchen, Kapitän, Lieschen, Mäggie
+
+Gretchen:	(schleicht sich unbemerkt an Toni und tippt ihm auf die Schulter, er erschrickt)
+     Haff ik mi doch futt doacht, dat ji doar wat mit to doon hebbt!
+     
+(Lieschen&amp;Mäggie setzen den Kapitän an die Bar und kümmern sich um ihn, die 
+Männer weichen rückwärts Richtung Stehtisch aus, es ist ihnen sichtbar 
+unangenehm)
+Toni:  	Gretchen! Du büst ja al doar! Ach du dat also eh...eegentlich köönt wi doar 
+gornix för!
+
+Gretchen:	Ja seker, dat was dat eerste Moal, dat ji dree mit en anrullen Katastrophe nix to 
+daun hebbt, Aver een moment, dor kaamt wi futt tau, nich vun de Stäe 
+bewegen, hebb wi us verstahn?
+	 (gesellt sich zu den anderen) (Die drei Männer nicken schüchtern)
+Lieschen:  	So, Herr Kapitän Struvenhus, nu blievt se schöön hier sitten, wi kümmert us üm 
+jau. Aver tauerst mööt wi hier, glööv ik, mal kött dree Gefangene in dat 
+Krüüzfüer nämen.
+
+Kapitän:	Aver ik bitt se, ik seh doch noch ümmer nix un ik mutt doch noa de 
+Kommandobrüch....
+
+Mäggie:  (Sie  klemmt  ihm  je  ein  Teebeutel  aufs  Auge  hinter  die  Brille) 
+Ja, ja allens in Ordnung. Bliev se ruhig hier sitten, wi bünd futt weer för jau 
+doar, de Ogen bünd versörgt un denn is denn uk fuut allens wedder in Botter.
+
+Gretchen:	So un nu tau jau! Wat is passeert? Spuckt´s lever futt ut, wi bünd hier op See, 
+doar kannst du al moal licht över Boord goahn!
+(Die Männer drucksen rum, sagen aber nix)
+
+Lieschen:  	Hinnerk! Du bruukst die nu goar kien Utrede infallen loaten, ik seeh di doch al 
+an, dat diene 5 Gehirnzelln an rooken bünd, wo du ut de Nummer weer 
+rutkummmst.
+(Stille)
+
+Mäggie:  	Willi! Wenn du nich futt dien Futterluke opmoakst un mi seggst, wat ji anstellt 
+hebbt, sett ik die as bi Robinson Crusoe op en eensoame Insel ut un dat ohne 
+Freedag!
+Willi:	Aver vondoage is doch Moandag...
+
+Mäggie:	Willi!
+
+Willi:	Is ja all gaut, ik geev allens tau, bevör ik weer twee Weken Huusarrest kriegen 
+dau. Wi hebbt een Fernkiieker bastelt. Glotzi 3000 mit de kannst du bis noa 
+Korsika röverkieken, so scharp is dat. Aver dat dürt man nich ohne tosätzlich 
+Sünnschutz bruken und dat hebbt wi nu moal liggen loaten un....
+Toni:  	...Un de Struvenhüsken meent, he mutt doar dörkieken un haff sück de Ogen 
+verbrannt. Dat haff ja tauletzt kien eene to üm seggt! Wi wüssen, wo man 
+dormit ümgeiht ... De nich!
+
+Hinnerk:  	Eben! Wi bünd also völlig schuldlos! Wull ik Blaut  moal seggen! Eene mutt halt 
+weten, wat een kann un wat een nich kann, un een mutt uk siene Grenzen 
+kennen. Is halt nich jeder so technisch verseert as wi.
+
+Lieschen: 	Hinnerk ik glööv, du spinnst nu kummplett oder wat? Ji loatet hier dat Dinge 
+eenfach soo rümliggen, so dat doar jeder ankann. Un nu habbt wi een Kapitän, 
+de nich mehr kieken kann.
+Gretchen:	Also ji liedt ja woll ünner vullstännig Sümstöverschätzung oder? Kiekt jau moal 
+den armen Kapitän Struvenhus an! Un nu? De kann Schoadensersatz vun jau 
+fordern. 
+		(Männer werden immer kleiner)
+
+Mäggie:	Willi, ik bün so suer, ik segge di eens, vanoabend schlöppst du op´n Balkon!
+
+Willi:	Aver Mäggie, wi hebbt doch kien Balkon! Dor kummt doch futt dat Woater 
+unner use Fenster, doar goah ik joa över Board!
+Mäggie:	Joa, heller genau!
+
+Toni:   	Gretchen, nu komm, nu wees nich so grell up us, dat hebbt wi doch echt nich 
+mit Afsicht moakt. Is ja ok allens nich so slimm.
+
+Hinnerk:  	So süch dat ut, weil wi us doar vörher natüürlich gaaanz genau över infomeert 
+habt! Wi bünd ja nich dumm, also ji ünnerschätzt us, glööv ik, een wenig. Wenn 
+de seltene Fall vun en Netzhuutverbrannung intritt, denn ahhhh, denn.... 
+
+Willi:	Denn mutt de Patient vör Licht schützt werrn un dürt kein anstrengende 
+Aktivitäten dörführn.
+Toni:  	Un denn schull dat Ogenlicht binnen en poar Daage weerkoamen. Also seet 
+se... allens half so leep, in en poar Doage is de Kapitän weer as neei!
+
+Kapitän:	Mine Herren, uk wenn mine Ogen opstunns nicht funksioneert, kunn ik jau 
+Gesprääk doch hören, da (wird lauter) mine Ohren Gott seis gedankt noch 
+kummplett in Ordnung bünd! (Steht auf, die Frauen führen ihn nach vorne) Ik 
+fass moal tohoope.
+All as wi noch in Hoaven vun Savona loagen, müss ik dortüschken goahn, weil 
+de Doamen bi dat Inschippen al so vööl Chaos un Unruh inrichtet hebbt, dat ik 
+dat Boarding vörstrecken müss. (Männer gestikulieren zu den Frauen - seht ihr, 
+ihr seid schuld, Kapitän wird immer lauter) Denn wörr ik güstern bi dat 
+Kapitänsdinner ok vun de Damen in Beschlach noahmen. As denn en anner 
+Doame vun Deck 5 sück bi mi an´n Dischk setten wull, wörde ehr mit een Gavel 
+in de Hand stoaken!
+Mäggie:	Ja, harr se ok verdeent, dat was nämlich de blöde Kauh vun den Pool!
+
+Kapitän:  	Un denn! Un denn woaget ji dat ok noch mi mit düt komische Deel hier...
+
+Toni:	...Glotzi3000!
+
+Kapitän: 	(lauter und wütend) Dat is mi schietegoal, wo dat Ding hier heet, dat haff mi 
+mine Ogen verbrannt!!! Se alle hier bünd de slimmsten Passagiere, de ik je an 
+Board harr!
+
+Lieschen:	Dat düürt se so aver nu uk nich seggen!
+
+Hinnerk: 	Und dat is doch uk Blaut  half so leep! Dat geiht doch weer vörbi! Se mööt Blaut  
+noch en bittken wachten!
+Kapitän:	Ik haff kien Tiet, to wachten! Ik mutt in een Stüünd in´n Haven vun Marseille 
+inloapen ... un well schull dat Schipp stüern, wenn ik dat nich kann?!!
+
+Willi:	Ik! Ik kann dat!
+
+Die Frauen: Du?
+
+Willi:	Jawoll, ik hebb doch letztens een Kurs bi de VHS moakt..
+
+Kapitän:	De VHS büdt Kurse an, woar Krüüzfohrtscheep stüert warrt?
+
+Willi:	Äääähm, joa so ähnlich!
+
+Mäggie: 	(zu den anderen) Oh nee, ik weet heel genau, wat för en Kurs de meent: ,,Min 
+feernstüert Boot un ik".
+
+Toni:   	Un de Hinnerk uni k bünd joa eegentlich al halfe Intschenööre, so dat us dat in´t 
+Blaut  liggt!
+
+Hinnerk:  	Also dit Schipp hier inparken in Marseille - also dat is definitiv een vun us 
+lichteste Übungen!
+Lieschen:  	Hinnerk, nu överdriev nich so, kiek di mal us Opel tohuus an, woveel Dellen de 
+al haff, un dat is en Nummer lüttker as dat Böötchen hier.
+Hinnerk:	Ach waaaatt... (winkt ab)
+
+Mäggie:	Un eerst us Schuvkarren Willi!
+
+Gretchen:	Toni! Siet wannehr büst du denn en Intschenöör? Du weetst doch nich moal, 
+wo man dat schrieven deit!
+Toni:   	Ik mutt dat ja ok nich opschrieven, woar man dütt Schipp stüert, man ik mutt 
+dat moaken! Also nu loat mal de Profis moaken!
+Kapitän:	Se wullt mi also alln Eernstens seggen, dat se sück in de Loage föhlt, min Schipp 
+in den Haven vun Marseille intaustüern?
+Alle drei:	Kloar!
+
+Kapitän:	Oh, min Gott, ik hebb de Geschäftsführerinnen vun dat Reisebüro Ahoi-Reisen 
+an Board, de allens pienlichst genau ünnersöken daut, of dat hier op de MS 
+Rosta allens as´an Snürken klappt, een Blamage dürr ik mi hier afsluut nicht 
+leisten!! Un nu wulln de dree ganz unerfahrenen, sümst överschätzenden 
+Clowns mien Schipp stüern? Dat harr ik mi in miene schlimmsten drööme nicht 
+utdenken künnt.
+(es kommt der Einspieler "Seemann, lass das träumen" und alle außer Kapitän 
+schunkeln mit)
+
+Vorhang - Ende 2. Akt!
+ 
+
+
+3.	Akt
+(Die Bühne ist zunächst leer, man hört nur über die Lautsprecher das Geschehen, die Männer 
+sind nicht zu sehen; 
+Alternativ: Männer auf der Bühne an einer Requisite mit Bordinstrumenten wi eine 
+Schiffsbrücke; der Rest der Bühne wi im 1. Akt mit einem Vorhang abgehangen; 
+Alternativ: die Männer stehen auf dem Balkon, das ist die Brücke - in dem Fall am besten mit 
+Kamera aufnehmen und das Bild vorne auf die Leinwand zusätzlich übertragen
+Altenativ: die Szene der Männer wird in einem echten Schiff gefilmt und auf Leinwand 
+gebracht)
+
+1.	Szene
+Gretchen, Lieschen, Mäggie
+Toni: 	So, denn loat mi mial kieken... Knöppe, Knöppe, Knöpppe... Schalters... 
+Knöppe.... alns kloar...ik weet bescheed.
+(Gretchen, Lieschen, Mäggie kommen auf die Bühne, stellen sich an die Reling 
+und beobachten quasi wi die Männer einparken. Sie unterstützen die Szene mit 
+Gestik und Mimik)
+Hinnerk:  	Ach un kiek moal ne Rückfahrtkamera gifft dat ook, sogoar met 360 grad 
+Rundümsicht, wenn wi Glück hebbt, gifft sogoar ne Eeenpoarkhülpe
+Willi:	Oh wat is dat dann för ein Knöppken, de is joa extra grot...  (es ertönt ein 
+Alarmsignal) Hoppla, Deit mi leeid! Ah ik seei all de Steeh woar wir inpoarken 
+möt, well moakt dat van uns?
+
+Toni:	Hinnerk, dat moak ik, holl du moal min Beeier...
+
+Hinnerk:	Au Toni, Toni moak sachte... sachte.... Uhhh dat wörd knapp.
+
+Willi:	Backstürr.... Du möst backstürr föhrn! Nu scharp inschloagn, Backstüeeeeeerrr!
+Hinnerk:	Dat heet Backboard un nich backstürr...!
+
+Toni:	Loat ji mi doch tofreeden mit jau Stürr un Backboard rechts un links.... 
+
+Willi:	Wachte ik schalt dat Navi in. (Es ertönt das Gepiepe einer Einparkhilfe vom Navi, 
+wird immer aggressiver... langer Piepton, dann ein schrammendes Geräusch.)
+
+Toni:	So! Noch eene watt to seegen? Eenwandfree segg ik jau! Lüttke Delle... man n 
+büttken schwund is öwerall ...
+ 
+Hinnerk:	Genau wi bünt hier ja ook nich up Titanic...n lütten Kratzer... dat poleert wi 
+noasen rut.
+
+Willi:	De Kapitän sücht dat joa sowiso nich (lacht).
+
+Kapitän:	Meine sehr verehrten Passagiere, soeben sind wir in den Hafen von Marseille 
+eingelaufen, sie können nun von Bord gehen und unsere Landausflüge 
+genießen. Das Schiff wird pünktlich um 16.00 Uhr wider ablegen, ich wünsche 
+einen schönen Tag!  
+
+(Toni, Hinnerk und Willi Freeze! -	Licht wird gedimmt - Die Frauen gehen von der Bühne, sie 
+wollen ja an Land. Es ertönt Möwengeschrei und Williösische Musik. Williösische Bistromusik, 
+Stimmengewirr etc. soll die Zeit überbrücken vom Landausflug - ggf. n bisschen Lichtshow 
+oder n Seitensketsch - Licht geht wider hoch, wenn komplett an, exakt gemeinsam aus dem 
+Freeze)
+
+Toni:	Also, dann parkt wi düssen Karren nu moal weer ut, nu tweet wi joa woar dat 
+geiht.
+
+Hinnerk:	Awer Toni dat is nettergroad teihn vör veer, de Kapitän haff doch veere seggt, 
+schöllt wi nich noch n bittken wachten?
+
+Willi:	Üm 4 moakt de Poolboar oapen und ik will de erste ween de op´n Boarhocker 
+sitt ... Toni giff Gas!
+Toni:  	Tau Deenste, geiht löss. (Man hört Maschinengeräusche lauter werden, Horn 
+tutet etc.) Also doar kiekt aan, eenwandfreei, ohne Parkrempler" Nu hebbt wi 
+freere Föhrt noar Barceloooooooooooa...
+
+(Männer Freeze - Blackout - Vorhang zu, schneller Abbau, - Vorhang auf - Frauen kommen 
+wider auf die Bühne)
+
+2.	Szene
+ Mäggie, Gretchen, Lieschen
+
+Lieschen:  	Also nu bünn ik awer sowat van stolz up min Hinnerk. Hebbt seei doch 
+woarhaftig dat Boot in- un weer utpoarkt.
+
+Gretchen:	Joa, well haff dat woll docht, doar hebbt wi use Kerls moal echt ünnerschätzt... 
+un dat mit den lüttken Kratzer faallt ook goar nich up
+Mäggie:  	Ja, uk wenn bi min Willi boven uk nich de hellste Kerze brannt...vandoage haff 
+he mi würklich överrascht.
+
+(Britta und Gitta betreten die Bühne, in Williösischem Schick Sonnenhüte, 
+Brillen, Einkaufstaschen)
+ 
+
+3.	Szene
+Britta, Gitta, Lieschen, Mäggie
+
+Britta:	Joa wi, is denn de Boar hier noch ümmer dicht? Man de Kapitän Struvenhus...
+
+Gitta:	...wull doch för us sien Kapitäns-Cocktail 
+
+Britta:	...serveeren un n is goar kiene doar?
+
+Lieschen:	Wiso kreeg de nu nen Kapitäns Cocktail un wi nich?
+Mäggie:	Woarschienlich hebbt de dat extra dortaubestellt!
+
+Britta:	Un? Hebbt seei düsse Krüzfoart hier ook öwert Reisebüro bucht?
+
+Mäggie:  	Ne, wi stoaht in Maseille an Hoaven wachtet so up´n Bus.... Un denn so upmoal 
+is düt Schipp hier koamen un wi bünt fix insteegen.
+
+Gitta:		Ach wat moie! Bünt see denn bis nu...
+
+Britta:		...tofreden mit dat wat up dit Boot anboan wörd?
+
+Gitta:		...hebbt see irgendwecke Beanstannugnen?
+
+Britta:		... woar gefallt jau den Service?...
+
+Gitta:		...Un  wat hollt see van de Pools, is dat Woater tau kolt? ...
+
+Britta:		... oder tau woarm  ... as so´n fleeschbrühe de man inne Sünne stellt haff? 
+
+Gitta:		Un woar süch dat bi dat Eeten ut?....  
+ 
+Britta:		Allet van´t Feinsten oder gifft dat....
+
+Gitta:		Örgend watt to verbetern? Wi bünt heel...
+
+Britta:		...Ohr!
+
+Mäggie:	Nee wi hebbt....
+
+Lieschen:	...nix to....
+
+Mäggie:	...beanstanden. Un? Hanni un Nanni, wat drieft jau beide up düt moie 
+Bööötchen?
+
+Britta:		Geschäftliche Angelegenheiten! Britta un....
+
+Gitta:		...Gitta Strohbach-Strümpfelbaum. (schütteln die Hände)
+
+Britta:	Wi habbt vandoage vullet Programm segg ik jau, schlendern un bummeln dör 
+de....
+Gitta:		...Gassen van Marseille - is al doan! Nu hebbt wi noch den...
+
+Britta:		...Kapitäns-Cocktail bucht und dornoa eene stünne...
+
+Gitta:		....Yoga mit dat Fitness-Team van düt Schipp und van....
+
+Britta:	...oabend steiht denn noch de groooote Travestie-Musical-Show op Programm! 
+Direkt van hier boaben Oapen-Air up Sünnendeck ...vör alle Lüüe (schaut ins 
+Publikumm) ok up ünnere Pooldeck.
+
+Gitta:	...un weil wi tau de wenigen hört de vun´t Sünnendeck taukieken dürt hebbt wi 
+us extra... 
+
+Britta:		...vörhen in Marseille de dortau passende Oabengardrobe köfft!
+
+Gitta:	Also kumm Britta, loat uns kött use Taschken up Kabine brengen, dann koamt wi 
+in ne halve Stünne weer, viellicht is de Kapitän dann ja doar un kredenzt us usen 
+Kapitäns-Cocktail.
+
+Britta:		Also min Doamen,  wi wünschket jau... 
+
+Gitta:		...een moien Noamiddach, un viellicht sücht man sich joa.... 
+
+Britta:		...löter noch bi´t Animationspogramm....
+
+Britta+Gitta:	Tschüssssssssssssssiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+
+Alle drei:	Tschüssssssssssssssiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+
+Mäggie:	Wat bünt dat dan för Transusen? Doar kann de Kapitän awer man bliede wän,           
+dat wie bie dat Oabendeeten ümmer bi üm sitten!  
+
+Lieschen:	Awer dat kannste lut seggen! 
+
+(Frauen begeben sich zur Bar, Männer kommen mit stolz geschwellter Brust herein)
+ 
+
+
+4.	Szene
+Gretchen, Lieschen, Mäggie, Toni, Willi, Hinnerk
+
+(Toni mit Blume in der Hand kommt im Schlepptau mit Gretchen herein)
+
+Gretchen:	Tonilchen! Min lütten Kapitän, also dat hest du joa sowat van souverän 
+meestert.... Daut haut mi joa ümmer noch heel ute Söcken. (fällt ihm um den Hals)
+
+Toni:	Tja leert is ehm leert.
+
+Hinnerk:	Was allet goar kien Problem! Man mutt sück doar einfach n´bietken rienfuchsen! 
+
+Willi:		Dat kann natürlich nich jeder! Doar mutt man all wat up´n Kasten hebben!
+
+(Kapitän stolpert mit Sonnenbrille und Stock herein)
+
+
+5.	Szene
+      Toni, Gretchen, Hinnerk, Willi, Lieschen, Mäggie, Schifferlein 
+
+Kapitän:	Hallo? Hallo? Toni, Willi, Hinnerk? Bünt ji doar?
+
+Lieschen:	Awer Herr Kapitän Struvenhus! Seei schöllt doch liggen blieven un sick schonen!  
+Seei schöllt hier doch nicht as n Blinde Kauh rümloapen... dat is joa 
+kauhgefährlich, ähm, saugefährlich! 
+
+Kapitän:  	Ja woar schöll ik dann....? Woar schöll ik tau Ruhe koamen? Wi bünt tein 
+Minuten to frauh ut`n Hoaven utlöppt.... Dat is ´n Katatstrophe... 
+
+Mäggie: 	Min Tied, seei bünt ja awer ok mit goar nix tofreeden oder? Nu hebbt use Kerls 
+dat so gaud moakt mit dat utparken van düt Böötchen un koamt sogoar noch vör 
+de Tied in Barcelona an! Also woar is dat Problem? 
+
+Kapitän:	(wütend, steigernd) Woar dat Problem dorbi is.... Woar dat Problem dorbi is? De 
+heele Animations-Crew is noch in Marseille! Seei döisge Döspaddel hebbt n 
+groden Deel van mine Crew vergeeten! Ik bün gelinde seggt.... Am Arsch! 
+
+Toni:		... Oh Ha! Dat is nu ja man doof wa?
+
+Hinnerk:	Joaaa das ja man wat... awer künn joa ok leeper! ... to´n beispiel wenn wi denn 
+Koch vergeten haarn! 
+
+Kapitän:	Ik glöv seei verstoaht den ernst de Loage nich in de ik mi befinnen die! An Bord 
+bünt de Inhaberinnen van dat Reisebüro Ahoi-Reisen, dat hebb ik jau ja all 
+verkloort! 
+
+Gretchen:		Ah! Seei meent düsse Transusen! Hebbt wi ook all kennneleert.
+		
+Kapitän:	Düt Schipp wörd van de beiden Süstern genau ünner Lupe noamen. Wenn ik un 
+de heele Crew up düsse Reise nich een Top-Service ofleefert, kummt düt Schipp 
+noit nich in den Katalog van Ahoi-Reisen. Un dat allerwichtigste för de beiden 
+Fraulüe is use Unnerhollungsprogramm an Board.
+
+Lieschen:  	Stimmt! De warn nettergroad doar un hebbt dorvan schwärmt, dat se futt in ne 
+halve Stünn een Kapiätns-Cocktail kriegt und dornoar een Yoga-Stunde bucht 
+hebbt.... Un vanoavendd freeit se sick al heller up de Musical-Travestie-Show 
+
+Kapitän:	Na wunnerboar, ik schöll blind n Cocktail shaken un und miene Show un Sport-
+Crew steiht in Marseille.... Ik bün ant Ende, dat was et... ik goa över bord!
+
+Willi:	Ach wat, se möt ja nich futt denn Düvel an de Wand moalen. Dat gifft nix wat de 
+Willi nich weer hinkrich! Oder Mäggie? 
+
+Mäggie: 	Oha, also mi wörd doar futt so eeniget infallen... awer dann stoar wi mörgen 
+noch hier.
+
+Hinnerk:	Moment moal, wat meenst n doar mit Willi?
+
+Toni:   	ähhh... dat wür mi nu awer ook heller interesseeren... meesttied wenn de Willi 
+ideen haff möt wi dat an enne utboaden. 
+
+Mäggie: 	Herrgott nomoal, kann nich eenmoal wat normoal aflooapen? Eenfach moal n 
+heel eenfachen stinklangwieligen Urlaub? 
+		
+Willi:	Ach Quatsch, langwielig kann doch jeder. Also de erste Maat Willi övernehmt nu 
+dat Ruder! Ji Fraulüüüe schmeert nu den Kapitän mit de Creme sien Oogen in. 
+Dann trek ji jau´n Sport-Tüch an.... Un seeei Hr. Kapitän geeft mi moal  kört eehre 
+Kapitänsjack!
+
+Kapitän:	Noit in Leeven, geev ik jau miene Jacke!
+
+Willi:		Gaud, dann bün ik moal gespannt woar ji futt den Cocktail tausoamenwürfeln                                                                                           
+.                          willt.
+(Widerwillig zieht Kapitän die Jacke aus und gibt sie ihm, die Frauen sind ggf. 
+behilflich) Kiek... geiht doch, un passen deit deei ook hunnert.... Steiht mi ook 
+noch voel beeter! 
+
+Gretchen:		Ja un dann? Schöllt wi de Sportstünne övernehmen oder wat?
+
+Willi:	Richtig Sherlock Homes! Ji dreeie bünt doch fleeten joar all moal bi´n 
+Schnupperkurs för Yoga in´t Leeier Sportshuus ween. Dat mutt nu langen.
+
+Lieschen:	Dat meenst du nich würklich ernst?
+
+Willi:	Seih ik so ut as wenn ik Spass moak? ... un Mäggie... bevör du nu Luft hoalen 
+wusst... Abmarsch!
+
+(Die Frauen geleiten den Kapitän hinaus und gehen dann kommentarlos in ihre Kabinen)
+
+(Willi begibt sich im folgenden langsam hinter die Bar, nimmt Tequilla, Zitrone und Salz und 
+schenkt 3x Gläser ein)
+
+Hinnerk:	Willi, denk nich moal dran!
+
+Toni:   	Up goar kien Fall Willi wi bünt sieht 25 Joar gaude fründe un wenn dat nu noch n 
+poar joare wider goan schöll....  
+
+Willi:	...dann geihst du mit Hinnerk all moal runner in de Garderobe van de Show und 
+kiekst die de moisten Kleeder för us Musical-Show ut.... Ik will in de tischkentied 
+den Kapitän vertretn und mi bi de Coacktails versöken... Un Kerlse ik will nu kien 
+Mimimi... de Loage is ernst... wi hebbt wall Mest baut und dat mut wi nu weer 
+utbögeln... oder meent ji wat anneres?   PROST
+
+(stößt an, alle trinken; schenkt nochmal ein)
+
+Hinnerk:	Willi ik kun di n Hals ümmedreihen uns tau sowat tau verplichten 
+
+Willi:		PROST
+
+(stößt an, alle trinken; schenkt nochmal ein)
+
+Toni:   	Wenn dor je wat noa buten kummmt, Willi ik segg di...  
+
+Willi:		PROST, PROST!
+
+(stößt an, alle trinken; will nochmal einschenken - Hinnerk und Toni winken dann aber doch ab 
+und gehen, Willi darf sich noch einen alleine genehmigen 😊)
+
+
+
+Willi:	So Willi, nu hangt dat blots noch van di af! Barkeeper! (er spuckt in die Hände) 
+Will wi doch moal sseeein! Ik hebb doar vör joarn joa almoal so´n VHS-Kurs 
+moakt... 
+
+(Britta und Gitta treten in Sportkleidung auf, Willi hat die Jacke vom Kapitän über die kurze Hose 
+gezogen)
+ 
+6.	Szene
+Willi, Britta, Gitta
+
+Britta:	So, dann will wi doch maol kieken.
+Gitta:	Uhhh, of de Kapitän nu wall dor is un wi nu endlich usen Cocktail krieget.
+
+Britta:	Bevör de Yoga-Stünn anfangt.
+
+Willi:	Aber selbstverständlich mine Damen! Willi! Erste Maat und internatschonal 
+anerkannten Fachmann förden Bereich Cocktail-Schütteln. Nehmt seei doch 
+bidde Platz! (er geht hinter die Theke die Frauen nehmen an der Bar Platz) Deei 
+Kapitän höchstpersönlich haff mich seegt, ehr tau  Diensten tau ween, weil ik jo 
+quasi eine Legende bün biie dat Thema Getränkeversörgung! Ik hab jo sogor 
+eein eigenen Cocktail erfunnen, de würde extra na mi benannt. De "Flotte 
+Willi" haff übrigens nett sien Dörchbruch in New York hatt, dor hett de eeinfach 
+de "Flotte Willi"
+
+Gitta:	Ja gaut, wenn dat so is un de Kapitän extra för us
+
+Britta:	sien besten Mann parotstellt, dann feuhlt wir us mal geehrt! Wat is denn 
+drin in düssen Flotten Willi?
+Willi:	Ach, n` bitken wat van düt n`bitken wat van dat un n`Spritzerken   Zitronensaft! 
+(er stellt zwei Cocktailgläser auf die Theke und öffnet einen Shaker, dann 
+beginnt er zu improvisieren) Also as Basis verwendet wi 32,5 cl Weizenbeer, 
+dann 3,5 cl Kassensaft, 4,78 cl Bananensaft, dann wörd dat so richtig moi 
+geschmeidig!
+Gitta:	Ach dat giff jo ne wilde Mischung, mööt seei
+
+Britta:	dor denn nix offmeten? Normol haff man dor jo so`n  Metbecherchen oder?
+
+Willi:	Ne, blots de Amateure brukt dat! Ik hav hier das vollendete Oge! Man nu  nich 
+dörnannerbrengen, widder in Text! Ne Prise Zimt, ne Prise Chilli, eein 
+Schlückchen Tequila un natürlich nich tau vergeten bie Tequila, mutt unbedingt 
+Solt un ne Zitrone rin.
+Gitta:	Ne Heele?
+
+Willi:	Natürlich ne Heele! Aber up den Wurm möt wi verzichten, deei is net bien 
+Angelutfluch. So un denn noch 70 cl Stroh-Rum 80% Deckel drup und ördentlich 
+schütteln, schütteln, schütteln uuuuund fattig! (schenkt ein - giftgrüne Farbe! 
+Zweiten vorbereiten, Shaker verwenden oder Cocktailgläser bereits vorbereiten)
+Britta:	Dat is aver ne interessante Farve!
+
+Gitta:	Drink ji uk  eein mit!
+
+Willi:	Utgeschloten - ik bün in Dienst! Salute! (Die Frauen trinken, husten)
+
+Willi:	Und? De haff Füür oder?
+Britta:	Also ik mutt seggen so eein Cocktail haff ich würklich noch noit nich drunken, 
+deei Chilli un deei Strohrum
+Gitta:	deei brannt di den Rachen runner as eein Füürwark an Silvester und denn
+
+Britta:	kummmp dat Beer un dei Bananensaft! Dei löschet di fort den Brand un alln`s 
+werd heel flauschig in Mund. Bis denn
+Gitta:	dei Zimt in Offgang eein prickeln as  Miechamelfeute up deei Tunge achterlett 
+un  heel taun Schluss
+
+Britta:	kummmp deei Zitrone un neutralisiert alln`s weer! Ich nehm noch eein!
+Gitta:	ik  ook!
+
+Willi:	Leider, leider deei Damen mutt ik tau dat nächste Event, hier an Bord befinnt 
+sück een Milliadär, deei haff mi bucht för ne private Cocktailstunde. Aver! (er 
+kommt hinter der Bar vor und klotpft an die Tür, wo ihre Frauen drin sind) ji 
+hebbt  ja  nu eeine Yoga-Stunde bucht! Tau, rutkaomen, iji bünt dran!
+
+7.	Szene
+Gitta, Britta, Gretchen, Lieschen, Mäggie
+ (Frauen kommen in Sportkleidung raus, Haare hochgeknotet, Stirnband etc., 
+haben Flasche Wein und 5 Gläser dabei, stellen diese hin, Mäggie gießt ein)
+
+Mäggie:  Willi ik kann noch nich garanteern, of du den Obend vandaoge noch överleevst 
+oder of du Haifischfauer wörds
+Willi:	Ach wat, ji seht doch wunnerbor ut, dat maok ih spitze, man ik mutt nu heel  
+gau widder tau min Milliardär und achternah in die Ümkleide. (geht ab)
+Britta:	Ach ih bünt gor kiene Gäste hier sondern
+
+Gitta:	eein Deel van dat Animationsteam?
+
+Gretchen:	Joh, so in etwa, wi bünt, wir bünt professionelle ähm...
+Lieschen:  ...Yoga-Lehrerinnen! Un deswegen bekummpt nu erstmaol jede van us eein 
+Glas Wiien! Wi praktiziert nämlich dei hoge Kunst van dat Vino - Yoga.
+
+Britta:	Vino-Yoga?
+Mäggie: Jawohl, anners erdreggt man dat jo nich. (evtl. Yoga-Musik) Also nu nich lang 
+rumlamentieern, jeder nümmt sien Glas Win in deei Hand un denn fang wi an 
+mit deei erste Figur: Deei Boom! 
+(alle drei gehen in Position, führen vor, Regieanweisung. Sind bekannte Yoga-Posen)
+
+Gretchen:	So deei Damen un nu ih! In Position gaohen un Armse nao boben, Armse na 
+unnen - Schluck drinken! Immer moi widerhaolen!
+Lieschen:  So is dat moi, eeine fließende Bewegung ut denn Ellenbogen rut bis in den Mund 
+rin.
+( Kann beliebig widerholt werden bis entweder das Glas leer ist oder das Gesicht voll!)
+
+Gitta:	Aha, dat  is jo total interessant! Vino-Yoga, dat kenn ik ja noch gor nich!
+
+Britta:	Ik uk nich,  man is  up jeden Fall eeine heeil interessante Kombinatschion!
+
+Mäggie:  	So un nu wiieder tau de nächste Figur - deei Krieger. (die drei gehen in Position) 
+Hier mutt man besünners up dei Körperspannung achten. Nu heel faste dat 
+Zäpfchen anspannen! (die drei kneifen das Gesicht zusammen)
+
+Gitta:	Das Zäpfchen
+
+Britta:	woar schöll dat denn gaohen?
+
+Gretchen:	Höchste Konzentratschion! Bloß dör johrelange Übung! Wenn ih dat köönt, 
+denn bünn ji echte Yogis.
+Lieschen:  	So un nu in Position gaohen, Winglas strecken un över den Kopp Richtung 
+Mund föhren und eeinen ördentlichen Schluck drinken.
+Gitta:	Mi is licht schwummerich, man deei Muskeln
+
+Britta:	dei bünt al totaol entspannt.
+
+Mäggie: 	Seh ji, net so mutt da ween. Widermaoken, widermaoken! Jooo so ist gaud. Un  
+nu kummmt deei Königsdisziplin! Deei Verknüpper!
+Gretchen:	Ganz genau, up eein Beein staohen, dat annnere wit no achtern utstreeken, 
+Armsee utnanner un denn den gestreckten Faut anwinkeln un van achtern över 
+den Kopp bis no vörne int Gesicht brengen un dann den groten Thön an dat 
+rechte Nösenlock inhoken.
+
+Gitta:	Auuu äääähm ik glöve wi möt denn so langsam
+
+Britta:	up Zimmer, ach et is jo al so laote un wir möt jo ok noch dat Obendkleed 
+antrekken!
+Gitta:	Hach, wi  wörden jo so gern noch widermaoken, dat was jo äußerst lehrreich, 
+man nu drängt deei Tied.... bis löter! (gehen rasch ab)
+ 
+Lieschen:  (lacht) Ha! Dat was doch sensationell! As wi vermutet hebbt: bieen Verknöter 
+stieget sei ut un speelt  den sterbenden Schwaon! Dat was eine wahre 
+Meisterleistung van us! Prost! (stoßen an)
+
+Struvenh.: 	(nicht zu sehen nur zu hören) Ich kann weer seeihn! Juhuuu ich kann weer 
+seeihn!
+Mäggie:	Oh hebb ji dat höört, deei Kapitän kann weer seeihn, na Gott sei Dank!
+
+Gretchen:	Lieschen, dann haff deei Behandlung van  di jo tatsächlich Wunner wirkt!
+
+Lieschen:   	Ik segg doch, deei Hämorrhoiden-Salbe van Hinnerk, deei is gefäßverengend un 
+wat ant Achterdeel funktionieert, mutt uk an deei Ogen klappen. Is even blots  
+ant andere Enne. (Kapitän kommt raus, glücklich und feuerrot um die Augen)
+
+8.	Szene
+Lieschen, Mäggie, Gretchen, Schifferlein
+
+Struvenh.: Ik kann weer seeihn, ik bün weer herstellt. Juhuu!!!! Nu kummp allns in Ordnung.
+
+Mäggie:  	Jo, man deei Brille schulln ji viellichte noch eeine Wile drägen, weil anners 
+künnde man meeinen, ji hebbt den Begriff "Tomaten up deei Ogen" wörtlich 
+nohmen..
+
+Struvenh.: 	Ach is doch egaol! Wor bünt deei Reisebüro-Süstern, ik maok min 
+weltberühmten Kapitäns-Cocktail!!
+Gretchen:	All erledigt, deei erste Maat Willi haff dat doch övernaomen!
+
+Struvenh.: 	Oh minn Gott, deei Willi haff tatsächlich deei Cocktails mixt? Dat was sicherlich 
+eine Katastrophe! Un wat is mit deei Yoga-Stunde? De ist ja utfaalen un ik mutt 
+stattdessen...
+
+Mäggie: 	Ach papperlapapp utfaalen, allns kollen Koffee! Hebb wi allns övernomen! Bis 
+taun Verknöter bünt wi komen, dann habbt de Damen plötzlich Wichtigeret tau 
+daun hatt...
+Struvenh.: Der Verknöter? Ik bün ruiniert! De wert mi bi jedet andere Reisebüro ut dat 
+Programm schmieten. Ik weeit nich, wat ik nu daun schöll!
+
+Lieschen: 	Aver ik! Ji holt nu ehr Mikro un dann moderiert ji as gewohnt deei Travestie-
+Modenschau! Weil wenn ji mal na unnen kiekt, dann seh ji, dat dor al hunderte 
+van Passagieren up dat Pooldeck Platz naomen habt un heel gespannt up dat 
+Highlight van deei Krüzfohrt wachtet.
+
+Struvenh.: 	Deei Travestie-Modenschau? Aver wo schöll dei denn stattfinden? Min 
+Animationsteam stejit in Marseille in Hafen.
+ 
+Gretchen:	Kerl, nu  hebbt seei doch bidde maol etwas Vertrauen in us, wenn wi wat in deei 
+Hannde nehmt, denn könn ji sicher ween, datt dat ook klappt! Also wi drei 
+maokt us nu gau moi und ji maokt deei Moderation as immer un laot jau  jo nix 
+anmarken! (Die Damen gehen ab in die Kajüten)
+
+Struvenh.:	Boh, wenn ik düsse Reise heeil övertstoh, dann kann mi in düt Leven nix mehr     
+schocken! (Holt das Mikro, geht vor zur Reling) Mine sehr verehrten Passagiere, 
+leevet Publikumm! Bevör wi mit unsen Ballavend samt Galadinner anfangt, dür ik 
+jau vuller ähm (hüstelt) Stolt nu unse sensationelle, sagenhafte  Travestie-
+Modenschau präsentieren.Sowat haff et würklich noch noit geven. Ich bün net so 
+gespannt as ji! Heitet sie mit mi van Hatten willkaomen: Carla Cayenne, Pippa 
+Pepper und Lulu la Belle! Musik off!
+9.	Szene
+Toni, Hinnerk, Willi
+(Show - Hinnerk kommt von hinten durch das Publikumm in Feiner Abendrobe 
+(Marilyn Monroe Style). Es ertönt Klaviermusik, oder noch besser ein Matrose 
+spielt Schiffersklavier das Lied: "I wanne be loved by you" Hinnerk steigt ein und 
+singt "I wanne be loved boy you... und geht beim singen auf die Bühne, schäkert 
+über die Mimik mit dem Publikumm. Im zweiten Refrain kommen die anderen 
+beiden von hinten rechts und links über das Publikumm dazu gehen ebenfalls auf 
+die Bühne, am Ende stehen alle zusammen auf der Bühne. Falls Zugabe verlangt 
+wird: "Space-Taxi" die Männer schmeißen die Roben weg und darunter sind eng 
+anliegende Leggins und (T)raumschiff Oberteile. Alternativ kann man sich auch 
+auf eine andere Zugabe einigen. Die ganze Szene kann mit drei jungen Matrosen 
+zu den drei Grazien verfeinert werden, erhöht den Kontrast und lässt Raum zum 
+Spielen.
+
+10.	Szene
+Britta, Gitta, Gretchen, Lieschen, Mäggie, Schifferlein
+
+Struvenh.: 	Leve Gäste, ich hope jau haff unse Show gefaalen, ik dür jau nu aale tau einen 
+kostenlosen Cocktail in deei Meerjungfrau-Bar up Deck 8 inlaoden, drinket seei, 
+geniißet seei, van mi ut ok 2 oder 3 Cocktails (leiser) Viellichte hab ji dat heele 
+Dilemma dann morgen frau uk vergeten...
+
+(Gretchen, Lieschen, Mäggie kommen aus den Kabinen in schönen 
+Abendkleidern, richten sich aber nebenher noch, Ohrringe rein, Kleider zu, 
+waren in Eile.)
+
+Gretchen:	Ohhh... al vörbi?
+Lieschen:	Mist, dat har ik doch nu so gerne uk seein!
+
+Mäggie:  	Knapp verpasst, man för den Ballavend wulln wir ja schließlich heller moi ween! 
+Und: wo was et?
+ 
+Struvenh.: 	Ik befürchte, ik kann taukünftig deei Deertransporte up de See övernehmen, 
+denn up Passagiere bruk ik nich mehr hoapen!
+
+(Britta und Gitta treten auf in Abendrobe, bauen sich euphorisch vor jim auf, die 
+anderen Damen setzen sich an die Bar)
+Britta:	Herr Kapitän Struvenhus!
+
+Gitta:	Also wi möt jau seggen, et is würklich
+
+Britta:	unfassbor wat ji hier offleevert hebbt.
+Gitta:	Sowat giff et ja up kien Schipp!
+
+Britta:	Also würklich eein heller starket Stück us fehlt
+
+Gitta:	deei Worte!
+
+Struvenh.: 		Also mine Damen, il weeit nich, wat ik seggen schöll, ik, ik, ich bün wirklich 
+sprachlos, sowat is mi noch noit passeert up aale miene Reisen un ik kann jau 
+dat heel genau verkloren..
+Britta:	Dor gifft dat gor nix tau verkloren, weil
+
+Gitta:	et för us sünnenklor is, dat ji nich in unsen Katalog koomt!
+
+  Britta:	 Nein! Up gor kienen Fall! Denn ji kaomt up deei Titelsiete!     
+  Struvenh.:	 Aver dat könnt ji doch nich moken. Ik bün ruiniert......... Titelsiete? 
+  Gitta:	Jo klor! Also erstens düssen "Flotten Willi" den us de 1.Maat serviert haff
+Britta:	 noch noit eein beteren Cocktail drunken. Un denn noch
+Gitta:	dei dreii Yogalehrerinnen hier! Unfassbor goud! Dor markt man richtig
+
+Britta:	 dat man bi Profis is! 
+Gretchen:	Tja leehrt is even leehrt! 
+Lieschen:	Och, johrelange Övung!
+Mäggie:	Ik glöve, ik maok dat nu hauptberuflich!
+Britta:	Un dann noch disse Travestie-Modenschau! Mit wat för een Witz
+Gitta:	un wat för eein Charme! Also, jau Animations-Team verstait siien Handwark!
+
+ 
+Britta:	Herr Kapitän Struvenhus, wi sorget dorför, dat ehr Schipp för deei nächsten 
+Johre utbuchet is!
+Gitta:	Wörden ji us dorför van Avend noch taun Ball begleiten?
+
+Struvenh.: 	Aver selbstverständlich, et was mi eeine außerordentliche Ehre, bitte goaht  
+doch al maol vör, ich bün  foot bi jau!
+Britta:	Aber laotet sie us
+
+Gitta:	nich tau lange wachten! (gehen ab)
+
+Gretchen:	So und nu? Nu bünt ji sprachlos wat?
+
+Lieschen:	Tja in knifflige Situationen loopet wi tau Höchstform up!
+
+Mäggie:	Dat was quasi eein lüttken Spaziergang för us!
+
+Struvenh.: 	Miene Damen, ik mutt seggen, ok wenn ji un ehre Göttergatten mi erst in düsse 
+missliche Laoge brocht habbt, letztendlich hab ik et dör ehr Engagement up 
+deei Titelsiete van Ahoi-Reisen brocht un dat was al immer min Drööm! Ik will 
+mi erkenntlich wiesen, wat kann ik jau Gaudet daun? (die Damen tuscheln, 
+hängen sich dann beim Kapitän ein)
+Gretchen:	Vielleicht eeine lüttge Krüzfohrt?
+
+Lieschen:	In Haarbst?
+
+Mäggie:	Irgendwor hen, wor et warm is?
+Struvenh.: 	Eiine lütke Krüzfohrt in Haarbst, irgendwor hen wor dat warm is? (die Frauen 
+nicken) Tja dor will ik mi ja mal nich lumpen laoten! Wat hol ji van Karibik in 
+Oktober? (Die Frauen jubeln) Dat werte ik maol as eein Jo! So, dor wi us dann 
+dit Jaohr nochmals sejit un wi us nu al gaut kennenleehrtt habt, ik bün de 
+Florian! (Die Frauen freuen sich) Dann weer ik nu maol up den Ball gaohen, 
+grüßet ji mi bitte ehre Kerlse bzw. deei Damen! Un nich vergeten, deei erste 
+Danz van Aovend hört mi! (Die Frauen quatschen aufgeregt durcheinander, die 
+Männer stolzieren in Frauenkleidern herein und bauen sich vor den Frauen auf)
+ 
+11.	Szene
+Gretchen, Toni, Hinnerk, Lieschen, Willi, Mäggie
+
+Gretchen:	Ah dor kiek an, miene lütke Carla Cayenne, holla, holla! Also eein bitken sexy 
+find ik dat ja wall, wenn du eeine Strumpbüxe anhast (lacht).
+Toni:  	Gretchen hör mi bloß up, also wor ji dat utholt mit so eein Iinklemminstrument, 
+miien bestet Stück is heel inklemmt, dor musst du naosen erstmaol kieken, of 
+dor noch allns in Ordnung is.
+
+Gretchen:	Natürlich Tonichen.
+Lieschen:  Pippa Pepper, Hinnerk, Hinnerk! Wat  hest du nen Hüftschwung drup! Wor hast 
+du den denn nu herhoolt!
+Hinnerk:  	Tja Lieschen, du kennst even noch nich aale Sieten van mi, ik bün immer för 
+eeine Överraschung gaut. Kriesst naosen noch eine Privatvorführung.
+
+Willi:	Un mine seggt weer nix! Un Mäggie? Wat seggst du tau Lulu la Belle?
+Finnst mi doch heller  scharp oder?
+
+Mäggie: 	Also ik har dat ja nich docht, dat ich dat maol tau di segge, aver Fränzchen 
+vandaoge has du di sülms overtroffen! Wor du dor kort dat Ruder övernohmen 
+has un de heele Schiffsreise rettet hast, Respekt! Un ik mutt seggen, in dat 
+Kleidchen hest du tatsächlich eein ordentliche Knackmorse. (haut drauf)
+Willi:	(total gerührt, weint fast) Mäggie mine Duuve un dat ut dienen Mund, dat freit 
+mi aver! Un wat is mit den Kapitän? Was he taufreh?
+
+Mäggie:	Künn man so seggen! Dank uns haff de dat nich blots in den Katalog schafft van 
+Ahoi-Reisen sondern sogor up deei Titelsieete!
+Lieschen:	 Un deswegen wull he sück erkenntlich wisen un haff us inladt         ! 
+Gretchen:	Genau! Wir dürt in Oktober aale mitnander nochmol up Krüzfohrt!  
+Toni:	 Ne!! Ich dreji dör, worhen?
+  Alle drei
+Frauen:	IN DE KARIIIIIBIK!
+Hinnerk:	Tja, wir sesse tauhope bünd eben ein gescheites Team ut Leehe, giff et 
+Probleme, schreitet wi tau Tat!
+
+Willi:	Mit Intelligenz un Pfiffigkeit, stah wi stets för allet bereit.
+Toni:	Dorüm schullde man us in Leehe noit unterschätzen, denn wi könnt 
+sogor Barge versetten.
+
+Vorhang - Ende des Stücks!
+
+
+
+</textarea>
+  <div id="focusFloat" title="Fokusmodus beenden">🪄</div>
+
+<script>
+  const $ = (id)=>document.getElementById(id);
+  const state = {
+  favs: new Set(load("v18p_favs", [])),
+ cues: [], i: 0, anchors: [], hits: [], hitIdx: -1, roleSel: [], visible: [], raf: null, playStart: null };
+
+  function save(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} }
+  function load(k, fallback){ try{ return JSON.parse(localStorage.getItem(k)) ?? fallback; }catch(_ ){ return fallback; } }
+  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function setScale(v){
+    const s=Math.max(0.8, Math.min(2.6, Number(v)||1));
+    document.documentElement.style.setProperty('--scale', s);
+    $('szVal').textContent=(Math.round(s*100)/100).toString().replace('.',',')+'×';
+    save('v18p_scale', s);
+    autoFitCurrent();
+  }
+  function lastBefore(arr, pos){ let out=null; for (let i=0;i<arr.length;i++){ if(arr[i].idx<=pos) out=arr[i]; else break; } return out; }
+
+  function parseAll(text){
+    text = text.replace(/\r\n?|\u000D/g, "\n");
+
+    const acts = [], scns = [];
+    const reAct1 = /(^|\n)\s*(\d+)\s*\.?\s*Akt\b/gi;
+    const reAct2 = /(^|\n)\s*Akt\s*(\d+)\b/gi;
+    const reSc1  = /(^|\n)\s*(\d+)\s*\.?\s*Szene\b/gi;
+    const reSc2  = /(^|\n)\s*Szene\s*(\d+)\b/gi;
+    let m;
+    while((m=reAct1.exec(text))!==null) acts.push({idx:m.index+(m[1]?m[1].length:0), label: m[2]+". Akt"});
+    while((m=reAct2.exec(text))!==null) acts.push({idx:m.index+(m[1]?m[1].length:0), label: m[2]+". Akt"});
+    while((m=reSc1.exec(text))!==null)  scns.push({idx:m.index+(m[1]?m[1].length:0), label: m[2]+". Szene"});
+    while((m=reSc2.exec(text))!==null)  scns.push({idx:m.index+(m[1]?m[1].length:0), label: m[2]+". Szene"});
+    acts.sort((a,b)=>a.idx-b.idx); scns.sort((a,b)=>a.idx-b.idx);
+
+    const COLON = "[:\uFF1A\uFE55\u2236]";
+    const name  = "[^\n:\uFF1A\uFE55\u2236]{1,120}?";
+    const reSpk = new RegExp("(^|\n)\s*("+name+")\s*"+COLON, "g");
+
+    const ms = []; let mm;
+    while((mm=reSpk.exec(text))!==null) ms.push({ at:mm.index+(mm[1]?mm[1].length:0), name:(mm[2]||'').trim(), start: reSpk.lastIndex });
+
+    const cues = [];
+    for(let i=0;i<ms.length;i++){ const cur = ms[i]; const end = (i+1<ms.length) ? ms[i+1].at : text.length;
+      let body = text.slice(cur.start, end);
+      body = body.replace(/^[\s\u00A0\u2007\u202F\u2060]*/g, "").replace(/[\s\u00A0\u2007\u202F\u2060]*$/g, "");
+      const act = lastBefore(acts, cur.at);
+      const scn = lastBefore(scns, cur.at);
+      cues.push({ speaker: cur.name, text: body, act: act?act.label:null, scene: scn?scn.label:null, at: cur.at });
+    }
+
+    function firstCueAfter(pos){ for(let i=0;i<ms.length;i++){ if (ms[i].at >= pos) return i; } return null; }
+    const anchors = [];
+    acts.forEach(a=> anchors.push({ label: a.label, idx: firstCueAfter(a.idx) }));
+    scns.forEach(s=>{ const act = lastBefore(acts, s.idx); const head = (act? act.label : "Akt"); anchors.push({ label: head+" • "+s.label, idx: firstCueAfter(s.idx) }); });
+
+    return { cues, anchors };
+  }
+
+  function splitStageSegments(s){ const segs=[]; const re=/\((?:.|\n)*?\)/g; let last=0, m; while((m=re.exec(s))!==null){ if(m.index>last) segs.push({text:s.slice(last,m.index), isDir:false}); segs.push({text:m[0], isDir:true}); last=m.index+m[0].length; } if(last<s.length) segs.push({text:s.slice(last), isDir:false}); return segs; }
+  function charsHTML(text, progress){ const s=text||''; const segs=splitStageSegments(s); const n=s.length; const limit=Math.floor((Math.max(0,Math.min(1,progress??0)))*n); let out='', seen=0; for(const seg of segs){ const wrapStart=seg.isDir?'<span class="stageDir">':''; const wrapEnd=seg.isDir?'</span>':''; out+=wrapStart+'<span class="chars">'; for(let i=0;i<seg.text.length;i++){ const ch=seg.text[i]; const esc= ch==='&'?'&amp;': ch==='<'?'&lt;': ch==='>'?'&gt;': (ch===' ' ? '&nbsp;' : ch); const cls=(seen<limit)?'c filled':'c'; out+='<span class="'+cls+'">'+esc+'</span>'; seen++; } out+='</span>'+wrapEnd; } return out; }
+  function speakerHTML(c){ return `<span class="speaker">${escHtml(c.speaker)}:</span>`; }
+
+  // --- Fixed Roles (requested) ---
+  const FIXED_ROLE_LABELS = ['Alle', 'Alle drei', 'Britta', 'Britta+Gitta', 'Die Frauen', 'Durchsage', 'Frauen', 'Gitta', 'Gretchen', 'Hinnerk', 'Hinnerk und Toni', 'Kapitän', 'Kapitän.', 'Kapitätn.', 'Lieschen', 'Mäggie', 'Struvenh.', 'Toni', 'Willi'];
+  function norm(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+  function labelMatchesSpeaker(label, speaker){
+    const L = norm(label), S = norm(speaker);
+    if (!L || L === 'alle') return true;
+    if (S.includes(L)) return true;
+    const parts = L.split(/\s*\+\s*|\s+und\s+/i).map(x=>x.trim()).filter(Boolean);
+    if (parts.length > 1){ for (const p of parts){ if (S.includes(p)) return true; } }
+    return false;
+  }
+  function isSpeakerVisibleByLabels(speaker, selected){ if (!selected || !selected.length) return true; for (const lab of selected){ if (labelMatchesSpeaker(lab, speaker)) return true; } return false; }
+
+  function extractRoles(){ state.roles = FIXED_ROLE_LABELS.slice(); }
+  function buildVisibleSet(){ const N=state.cues.length; state.visible=new Array(N).fill(true); const sel=state.roleSel||[];
+    if(sel.length){ state.visible=new Array(N).fill(false); for(let i=0;i<N;i++){ const sp=state.cues[i].speaker||''; if(isSpeakerVisibleByLabels(sp, sel)){ state.visible[i]=true; if(i-1>=0) state.visible[i-1]=true; if(i+1<N) state.visible[i+1]=true; } } }
+  }
+  function nextVisible(i){ const N=state.cues.length; for(let j=i+1;j<N;j++) if(state.visible[j]) return j; return -1; }
+  function prevVisible(i){ for(let j=i-1;j>=0;j--) if(state.visible[j]) return j; return -1; }
+  function firstVisibleFrom(pos){ const N=state.cues.length; for(let j=Math.max(0,pos); j<N; j++) if(state.visible[j]) return j; return -1; }
+
+  function renderRoles(){ const list=$('rolesList'); list.innerHTML=''; if(!state.roles||!state.roles.length){ list.innerHTML='<div class="small">Keine Rollen verfügbar.</div>'; return; } state.roles.forEach(name=>{ const row=document.createElement('div'); row.className='item'; const label=document.createElement('label'); label.className='small'; label.textContent=name; const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=state.roleSel.includes(name); cb.addEventListener('change', ()=>{ if(cb.checked){ if(!state.roleSel.includes(name)) state.roleSel.push(name); } else { state.roleSel=state.roleSel.filter(x=>x!==name); } save('v18p_roles', state.roleSel); buildVisibleSet(); let j=firstVisibleFrom(state.i); if(j<0) j=0; state.i=j; render(0); }); row.appendChild(label); row.appendChild(cb); list.appendChild(row); }); }
+  function rolesSelectAll(){ state.roleSel=[...FIXED_ROLE_LABELS]; save('v18p_roles', state.roleSel); renderRoles(); buildVisibleSet(); state.i=firstVisibleFrom(0); render(0); }
+  function rolesClearAll(){ state.roleSel=[]; save('v18p_roles', state.roleSel); renderRoles(); buildVisibleSet(); state.i=0; render(0); }
+
+  function render(progress){
+    updateFavUI();
+
+    const N=state.cues.length;
+    $('badge').textContent = N + ' Dialoge';
+    if(!N){ $('prev').textContent=''; $('curr').textContent='Keine Dialoge erkannt.'; $('next').textContent=''; $('hud').textContent='—'; return; }
+    state.i = Math.max(0, Math.min(state.i, N-1));
+
+    const prevIdx = prevVisible(state.i);
+    const nextIdx = nextVisible(state.i);
+    const curr=state.cues[state.i];
+
+    $('prev').innerHTML = (prevIdx>=0) ? `${speakerHTML(state.cues[prevIdx])} ${escHtml(state.cues[prevIdx].text)}` : '';
+    const p=Math.max(0,Math.min(1,progress??0));
+    $('curr').innerHTML = `${speakerHTML(curr)} ${charsHTML(curr.text, p)}`;
+    $('next').innerHTML = (nextIdx>=0) ? `${speakerHTML(state.cues[nextIdx])} ${escHtml(state.cues[nextIdx].text)}` : '';
+
+    $('hud').textContent = `Akt: ${curr.act||'—'} • Szene: ${curr.scene||'—'} • Position: ${state.i+1}/${N}`;
+    autoFitCurrent();
+  }
+
+  function autoFitCurrent(){ const vp=$('viewport'), curr=$('curr'); if(!vp||!curr) return; const avail=vp.clientHeight-8; document.documentElement.style.setProperty('--autoScale',1); requestAnimationFrame(()=>{ const h=curr.scrollHeight; let factor=1; if(h>avail && h>0) factor=Math.max(0.6, Math.min(1,(avail/h)*0.98)); document.documentElement.style.setProperty('--autoScale',factor); }); }
+
+  function buildToc(){ const el=$('toc'); el.innerHTML=''; if(!state.anchors.length){ el.innerHTML='<i class="small">Keine Akte/Szenen gefunden.</i>'; return; } const groups={}; state.anchors.forEach(a=>{ const m=a.label.match(/^(\d+)\.\s*Akt/); const ak=m?m[1]:'_'; if(!groups[ak]) groups[ak]={head:`${ak}. Akt`, items:[]}; groups[ak].items.push(a); }); Object.keys(groups).sort((a,b)=>(a==='_'?1:Number(a))-(b==='_'?1:Number(b))).forEach(k=>{ const g=groups[k]; const wrap=document.createElement('div'); wrap.className='card'; wrap.style.margin='8px 0'; const head=document.createElement('div'); head.className='row'; head.innerHTML=`<div style="font-weight:800">${g.head}</div>`; wrap.appendChild(head); const row=document.createElement('div'); row.className='row'; g.items.sort((A,B)=>(A.label.includes('•')-B.label.includes('•'))); g.items.forEach((it)=>{ const b=document.createElement('button'); b.className='btn-mini'; b.textContent = it.label.includes('•') ? it.label.replace(/^\d+\.\s*Akt\s*•\s*/,'') : g.head; b.disabled = it.idx==null; b.addEventListener('click', ()=>{ stopAuto(); buildVisibleSet(); let j=firstVisibleFrom(it.idx??0); if(j<0) j=0; state.i=j; render(0); }); row.appendChild(b); }); wrap.appendChild(row); el.appendChild(wrap); }); }
+
+  function runSearch(){ const q=$('q').value.trim(); const hits=[]; if(q){ for(let i=0;i<state.cues.length;i++){ const c=state.cues[i]; const block=(c.speaker+"\n"+c.text).toLowerCase(); if(block.includes(q.toLowerCase())) hits.push(i); } } state.hits=hits; state.hitIdx=hits.length?0:-1; renderHits(); if(hits.length){ stopAuto(); buildVisibleSet(); let j=firstVisibleFrom(hits[0]); if(j<0) j=0; state.i=j; render(0); } $('hitInfo').textContent=hits.length+' Treffer'; }
+  function renderHits(){ const list=$('hitList'); list.innerHTML=''; state.hits.slice(0,120).forEach((idx)=>{ const c=state.cues[idx]; const div=document.createElement('div'); div.className='item'; const label=document.createElement('div'); label.className='small'; label.textContent = `${c.speaker} – ${(c.text||'').replace(/\s+/g,' ').slice(0,80)}${(c.text||'').length>80?'…':''}`; div.appendChild(label); const go=document.createElement('button'); go.className='btn-mini'; go.textContent='Jump'; go.addEventListener('click', ()=>{ stopAuto(); buildVisibleSet(); let j=firstVisibleFrom(idx); if(j<0) j=0; state.i=j; render(0); }); div.appendChild(go); list.appendChild(div); }); }
+  function gotoHit(d){ if(!state.hits.length) return; state.hitIdx=(state.hitIdx+d+state.hits.length)%state.hits.length; stopAuto(); buildVisibleSet(); let j=firstVisibleFrom(state.hits[state.hitIdx]); if(j<0) j=0; state.i=j; render(0); }
+
+  function stopAuto(){ if(state.raf){ cancelAnimationFrame(state.raf); state.raf=null; } $('btnPlay').textContent='▶︎ Auto'; }
+  function startAuto(){ stopAuto(); $('btnPlay').textContent='⏸︎ Auto'; const duration=Math.max(600, Number($('playMs').value)||3000); state.playStart=performance.now();
+    const tick=(now)=>{ const t=now-state.playStart; let p=t/duration; if(p>=1){ let nxt=nextVisible(state.i); if(nxt<0){ if($('loop').checked) nxt=firstVisibleFrom(0); else { stopAuto(); render(1); return; } } state.i=nxt; state.playStart=performance.now(); p=0; } render(p); state.raf=requestAnimationFrame(tick); };
+    state.raf=requestAnimationFrame(tick);
+  }
+
+  function applyTheme(t){ const r=document.documentElement;
+    if (t==='light'){ r.style.setProperty('--bg','#f8fafc'); r.style.setProperty('--fg','#0b1220'); r.style.setProperty('--cueColor','#000000'); r.style.setProperty('--card','#ffffff'); r.style.setProperty('--border','#d4d4d4'); r.style.setProperty('--muted','#475569'); $('btnTheme').textContent='☀️'; }
+    else { r.style.setProperty('--bg','#0b1220'); r.style.setProperty('--fg','#e5e7eb'); r.style.setProperty('--cueColor','#ffffff'); r.style.setProperty('--card','#0f172a'); r.style.setProperty('--border','#1f2a44'); r.style.setProperty('--muted','#94a3b8'); $('btnTheme').textContent='🌙'; }
+    save('v18p_theme', t);
+  }
+  function applyFocus(on){ document.body.classList.toggle('focus', !!on); save('v18p_focus', !!on); autoFitCurrent(); }
+  function applyHideDirs(on){ document.body.classList.toggle('hideDirs', !!on); save('v18p_hideDirs', !!on); }
+
+  (function init(){
+
+// [FAV v2] wiring
+document.getElementById('btnFavToggle')?.addEventListener('click', ()=> toggleFav() );
+document.getElementById('btnFavs')?.addEventListener('click', ()=>{ $('favPanel').classList.toggle('open'); updateFavUI(); });
+document.getElementById('btnFavClose')?.addEventListener('click', ()=>{ $('favPanel').classList.remove('open'); });
+document.getElementById('btnFavClear')?.addEventListener('click', ()=>{ state.favs = new Set(); saveFavs(); updateFavUI(); });
+
+document.addEventListener('keydown', (e)=>{
+  if (e.key.toLowerCase()==='f' && !e.shiftKey && !e.altKey && !e.ctrlKey){
+    e.preventDefault();
+    toggleFav();
+  }
+});
+
+
+    const savedScale = load('v18p_scale', 1); setScale(savedScale||1); $('sizeSlider').value = savedScale||1;
+
+    const raw = (document.getElementById('playtext')?.value) || '';
+    const { cues, anchors } = parseAll(raw);
+    state.cues = cues; state.anchors = anchors; state.i = 0;
+
+    // Fixed roles init
+    state.roleSel = load('v18p_roles', []);
+    extractRoles(); renderRoles(); buildVisibleSet();
+
+    state.i = firstVisibleFrom(0) >= 0 ? firstVisibleFrom(0) : 0;
+    render(0); buildToc();
+
+    $('btnPrev').addEventListener('click', ()=>{ stopAuto(); const j=prevVisible(state.i); if(j>=0) state.i=j; render(0); });
+    $('btnNext').addEventListener('click', ()=>{ stopAuto(); const j=nextVisible(state.i); if(j>=0) state.i=j; render(0); });
+    $('btnToc').addEventListener('click', ()=>{ $('toc').classList.toggle('open'); });
+    $('btnPlay').addEventListener('click', ()=>{ state.raf ? stopAuto() : startAuto(); });
+    $('playMs').addEventListener('input', ()=>{ if(state.raf) startAuto(); });
+    $('sizeSlider').addEventListener('input', e=> setScale(e.target.value) );
+
+    $('btnSearch').addEventListener('click', ()=> $('searchPanel').classList.toggle('open') );
+
+    $('btnFind').addEventListener('click', runSearch);
+    $('btnPrevHit').addEventListener('click', ()=> gotoHit(-1));
+    $('btnNextHit').addEventListener('click', ()=> gotoHit(+1));
+
+    $('btnRoles').addEventListener('click', ()=> $('rolesPanel').classList.toggle('open') );
+    document.getElementById('rolesAll').addEventListener('click', rolesSelectAll);
+    document.getElementById('rolesClear').addEventListener('click', rolesClearAll);
+
+    $('btnStage').addEventListener('click', ()=>{ const on=!document.body.classList.contains('hideDirs'); applyHideDirs(on); });
+
+    let theme = load('v18p_theme','dark'); applyTheme(theme);
+    $('btnTheme').addEventListener('click', ()=>{ theme = (theme==='dark')?'light':'dark'; applyTheme(theme); });
+    let focus = load('v18p_focus', false); applyFocus(focus);
+    $('btnFocus').addEventListener('click', ()=>{ focus = !focus; applyFocus(focus); });
+    document.getElementById('focusFloat').addEventListener('click', ()=> applyFocus(false));
+
+    // Swipe navigation
+    const vp=$('viewport'); let sx=null, sy=null, moved=false; const SW=40;
+    vp.addEventListener('pointerdown', e=>{ sx=e.clientX; sy=e.clientY; moved=false; });
+    vp.addEventListener('pointermove', e=>{ if(sx!=null){ if(Math.abs(e.clientX-sx)>6 || Math.abs(e.clientY-sy)>6) moved=true; } });
+    vp.addEventListener('pointerup', e=>{ if(sx!=null){ const dx=e.clientX-sx, dy=e.clientY-sy; if(Math.abs(dx)>SW && Math.abs(dx)>Math.abs(dy)){ if(dx<0) $('btnNext').click(); else $('btnPrev').click(); } else if(!moved){ $('btnNext').click(); } } sx=sy=null; moved=false; }, {passive:true});
+
+    window.addEventListener('resize', autoFitCurrent);
+    const ro=new ResizeObserver(()=> autoFitCurrent()); ro.observe($('curr'));
+
+    window.addEventListener('keydown', (e)=>{ const tag=(document.activeElement&&document.activeElement.tagName)||''; if(tag==='INPUT'||tag==='TEXTAREA') return;
+      if (e.key==='ArrowRight'){ e.preventDefault(); $('btnNext').click(); }
+      if (e.key==='ArrowLeft'){ e.preventDefault(); $('btnPrev').click(); }
+      if (e.key===' '){ e.preventDefault(); state.raf ? stopAuto() : startAuto(); }
+    });
+  })();
+
+// [FAV v2] helpers
+function isFav(i){ return state.favs && state.favs.has(i); }
+function saveFavs(){ try{ save('v18p_favs', [...state.favs]); }catch(e){} }
+function toggleFav(i){
+  if (i==null) i = state.i;
+  if (!state.favs) state.favs = new Set();
+  if (state.favs.has(i)) state.favs.delete(i); else state.favs.add(i);
+  saveFavs(); updateFavUI(); render(0);
+}
+function updateFavUI(){
+  const tgl = document.getElementById('btnFavToggle');
+  if (tgl){
+    const fav = isFav(state.i);
+    tgl.setAttribute('aria-pressed', fav ? 'true' : 'false');
+    tgl.textContent = fav ? '⭐ Gemerkt' : '☆ Merken';
+    tgl.title = fav ? 'Favorit entfernen (F)' : 'Aktuellen Dialog merken (F)';
+  }
+  const list = document.getElementById('favList');
+  const cnt = document.getElementById('favCount');
+  if (!list) return;
+  const favIdxs = [...(state.favs||new Set())].sort((a,b)=>a-b);
+  list.innerHTML = '';
+  if (cnt) cnt.textContent = favIdxs.length ? ('⭐ ' + favIdxs.length + ' Favoriten') : 'Keine Favoriten';
+  favIdxs.forEach((idx)=>{
+    const c = state.cues[idx];
+    if (!c) return;
+    const row = document.createElement('div'); row.className = 'favItem';
+    const jump = document.createElement('button'); jump.className='favJump btn-mini';
+    const label = (c.act? c.act+' • ' : '') + (c.scene? c.scene+' • ' : '') + (c.speaker? '['+c.speaker+'] ' : '');
+    const preview = (c.text||'').slice(0, 50).replace(/\s+/g,' ');
+    jump.textContent = label + preview + (c.text && c.text.length>50 ? '…' : '');
+    jump.addEventListener('click', ()=>{ stopAuto(); state.i = idx; render(0); document.getElementById('favPanel')?.classList.remove('open'); });
+    const del = document.createElement('button'); del.className='favDel btn-mini'; del.textContent='×';
+    del.title = 'Favorit löschen';
+    del.addEventListener('click', ()=>{ state.favs.delete(idx); saveFavs(); updateFavUI(); });
+    row.appendChild(jump); row.appendChild(del); list.appendChild(row);
+  });
+}
+
+</script></div>
+  <div class="row">
+    <button id="btnAddMark" class="btn-mini">★ Merken</button>
+    <button id="btnClearMarks" class="btn-mini">Alle löschen</button>
+  </div>
+  <div id="markList" class="list"></div>
+</div>
+<script id="blueclick-js">
+document.addEventListener("click", e => {
+  const el = e.target.closest("button, input[type=range], select");
+  if (!el) return;
+  el.classList.add("clicked");
+  setTimeout(() => el.classList.remove("clicked"), 200);
+});
+</script>
+
+
+<script id="speaker-colorizer">
+document.addEventListener('DOMContentLoaded', () => {
+  const textContainer = document.getElementById('playtext') || document.body;
+  if (!textContainer) return;
+  function colorizeSpeakers(el) {
+    const re = /^([A-ZÄÖÜa-zäöüß0-9 .\-]+):/gm;
+    el.innerHTML = el.innerHTML.replace(re, '<span class="speaker">$1</span>:');
+  }
+  colorizeSpeakers(textContainer);
+});
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var sticky = document.getElementById('btnFavSticky');
+  var tgl    = document.getElementById('btnFavToggle'); // toolbar "☆ Merken / ⭐ Gemerkt"
+  var prev   = document.getElementById('btnFavPrev');
+  var next   = document.getElementById('btnFavNext');
+  if (!tgl) return;
+
+  function sync(){
+    var pressed = tgl.getAttribute('aria-pressed') === 'true';
+    if (sticky){
+      sticky.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+      sticky.textContent = pressed ? '⭐ Gemerkt' : '☆ Merken';
+      sticky.title = pressed ? 'Favorit entfernen (F)' : 'Aktuellen Dialog merken (F)';
+    }
+  }
+
+  // bottom "Merken" mirrors toolbar button
+  if (sticky){ sticky.addEventListener('click', function(){ tgl.click(); }); }
+
+  // observe toolbar button for changes
+  var mo = new MutationObserver(sync);
+  mo.observe(tgl, { attributes: true, attributeFilter: ['aria-pressed'] });
+  sync();
+
+  function getSortedFavs(){
+    try{
+      return Array.from(state.favs || new Set()).sort(function(a,b){ return a-b; });
+    }catch(e){ return []; }
+  }
+
+  function jumpFav(dir){
+    var favs = getSortedFavs();
+    if (!favs.length) return;
+    var i = state.i || 0;
+
+    if (dir > 0){
+      // next favorite strictly greater than current index; wrap to first
+      var idx = favs.findIndex(function(v){ return v > i; });
+      if (idx === -1) idx = 0;
+      state.i = favs[idx];
+    } else {
+      // previous favorite less or equal current -> choose last less than current; wrap to last
+      var idx = -1;
+      for (var k=0; k<favs.length; k++){ if (favs[k] < i) idx = k; }
+      if (idx === -1) idx = favs.length - 1;
+      state.i = favs[idx];
+    }
+    stopAuto();
+    render(0);
+  }
+
+  if (prev){ prev.addEventListener('click', function(){ jumpFav(-1); }); }
+  if (next){ next.addEventListener('click', function(){ jumpFav(1); }); }
+});
+</script>
+
+
+
+
+<script>
+// [FavAuto v7] Autoplay all dialogs to last favorite; optional loop back to first
+(function(){
+  var autoBtn, watcher = null, prevLoop = null, lastIdx = 0;
+
+  function byId(id){ return document.getElementById(id); }
+  function getSortedFavs(){
+    try{ return Array.from(state.favs || new Set()).sort(function(a,b){ return a-b; }); }
+    catch(e){ return []; }
+  }
+  function firstFav(){ var f = getSortedFavs(); return f.length? f[0] : -1; }
+  function lastFav(){ var f = getSortedFavs(); return f.length? f[f.length-1] : -1; }
+  function isRunning(){ return autoBtn && autoBtn.getAttribute('data-running')==='1'; }
+
+  function loopEnabled(){
+    var el = byId('chkFavLoop');
+    return el ? el.checked : false;
+  }
+  function loadLoop(){
+    try{
+      var v = localStorage.getItem('favAutoLoop');
+      if (v !== null){
+        var el = byId('chkFavLoop');
+        if (el) el.checked = (v === '1');
+      }
+    }catch(e){}
+  }
+  function saveLoop(){
+    try{
+      var el = byId('chkFavLoop');
+      if (el) localStorage.setItem('favAutoLoop', el.checked ? '1' : '0');
+    }catch(e){}
+  }
+
+  function start(){
+    var lf = lastFav();
+    if (lf < 0){ return; }                    // no favorites
+    // disable global loop while we run to avoid wrapping to start
+    var loopEl = byId('loop');
+    prevLoop = loopEl ? loopEl.checked : null;
+    if (loopEl) loopEl.checked = false;
+
+    // start global autoplay from current position
+    if (typeof startAuto === 'function') startAuto();
+
+    lastIdx = state.i || 0;
+    // set up watcher
+    watcher = setInterval(function(){
+      try{
+        if (!state || typeof state.i !== 'number'){ return; }
+        var cur = state.i;
+        if (cur >= lf){
+          if (loopEnabled()){
+            var ff = firstFav();
+            if (ff >= 0){
+              state.i = ff;
+              lastIdx = state.i; // reset tracker so we don't mis-detect wrap
+              // keep autoplay running; no stop
+              return;
+            }
+          }
+          stop(); // stop at last fav if no loop
+          return;
+        }
+        if (cur < lastIdx){
+          // likely wrapped or manual backward jump -> stop unless loop is enabled and we just reset
+          if (!loopEnabled()){
+            stop();
+            return;
+          } else {
+            // if loop is enabled, allow a backward jump only if we are at/near firstFav
+            var ff2 = firstFav();
+            if (ff2 >= 0 && cur <= ff2) {
+              lastIdx = cur;
+              return;
+            } else {
+              stop();
+              return;
+            }
+          }
+        }
+        lastIdx = cur;
+      }catch(e){ /* ignore */ }
+    }, 200);
+    autoBtn.setAttribute('data-running','1');
+    autoBtn.textContent = 'Auto ⏸';
+    autoBtn.title = loopEnabled() ? 'Dauerschleife aktiv – bis letztem Favoriten und zurück' : 'Auto bis letztem Favoriten stoppen';
+  }
+
+  function stop(){
+    if (watcher){ clearInterval(watcher); watcher = null; }
+    if (typeof stopAuto === 'function') stopAuto();
+    // restore loop checkbox
+    var loopEl = byId('loop');
+    if (loopEl && prevLoop !== null) loopEl.checked = prevLoop;
+    autoBtn.removeAttribute('data-running');
+    autoBtn.textContent = 'Auto ▶';
+    autoBtn.title = 'Favoriten automatisch (optional Dauerschleife)';
+  }
+
+  function toggle(){
+    if (isRunning()) stop(); else start();
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    autoBtn = byId('btnFavAuto');
+    loadLoop();
+    var chk = byId('chkFavLoop');
+    if (chk){ chk.addEventListener('change', function(){ saveLoop(); if (isRunning()){ autoBtn.click(); autoBtn.click(); } }); }
+    if (!autoBtn) return;
+    autoBtn.textContent = 'Auto ▶';
+    autoBtn.title = 'Favoriten automatisch (optional Dauerschleife)';
+    autoBtn.addEventListener('click', toggle);
+    document.addEventListener('keydown', function(e){ if (e.key==='Escape') stop(); });
+  });
+})();
+</script>
+
+
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  try{
+    var countEl = document.getElementById('infoCount');
+    if (countEl){
+      var n = (window.state && Array.isArray(state.cues)) ? state.cues.length : null;
+      countEl.textContent = (n!=null) ? (n + ' Dialoge') : '– Dialoge';
+    }
+    // If you want to derive version dynamically from the document title, uncomment:
+    // var verEl = document.getElementById('infoVersion');
+    // if (verEl && document.title) verEl.textContent = document.title;
+  }catch(e){ /* no-op */ }
+});
+</script>
+
+</body>
+</html>
